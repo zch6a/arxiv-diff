@@ -98,3 +98,13 @@ all real edits; 0 unexplained numbers in 389 audited table pairs; authors right 
 The sources are deleted.
 
 Tests: 44, Python 3.10 and 3.14; ruff, mypy clean.
+
+### 2026-11-13 — on GitHub
+
+- Public repository https://github.com/zch6a/arxiv-diff (topics: arxiv, latex, diff, research, papers,
+  reproducibility, github-actions). Before pushing: every commit by zch6a with the noreply address, no attribution
+  lines, no personal paths, no paper sources in the tree (38 files).
+- CI green on the first run: tests on Ubuntu, Windows and macOS with Python 3.10 and 3.13, ruff, mypy; the Action job
+  on the example's two versions found `TinyFormer · EN-XX: 31.2 → 30.8` as the check expects.
+
+Next: five polishing rounds, then v0.1.0.
