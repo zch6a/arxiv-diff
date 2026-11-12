@@ -87,7 +87,7 @@ Tests: 33, Python 3.10 and 3.14; ruff, mypy clean.
 | 1 | GPT-3: a table whose every row was renamed ("Completion" → "Target Completion") unpaired | pairing by file, shape and columns |
 | 2 | text: years in citation keys, `12288 → 12,288`, `$4.6$k → 4,600`, `WikiText-103` as minus 103 (11 false) | citations one token; values compared with k/M/B; no minus after a letter |
 | 2 | Chain-of-Thought: cells `\cell{6.5}{0.4}` not numbers | the paper's commands with arguments expanded before tables are read |
-| 4 | ALBERT: the row `xlarge | 59M` became `| 60M`: its 5 changed results unseen | rows named alike paired as renamed, their cells compared |
+| 4 | ALBERT: the row "xlarge, 59M" became "xlarge, 60M": its 5 changed results unseen | rows named alike paired as renamed, their cells compared |
 | 4 | LoRA: `.32` cells not numbers | numbers without a leading zero |
 | 5 | LoRA: columns `Accuracy (%)` → `Acc. (%)`: 4 changed results unseen | columns paired as renamed too |
 | 5 | authors: LoRA's list wrapped over two lines (a false "removed"), footnote marks, affiliations as names, 4 papers with none found | authors read per group until the first affiliation; middle initials ignored when comparing |
