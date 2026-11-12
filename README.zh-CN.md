@@ -42,6 +42,10 @@ Numbers in the text
 
 上面每一处改动都在两个版本的源码里人工核对过：EN-FR 结果改成了 41.8，表 3 里 base 模型的前馈维度从 1024 改成了 2048。
 
+在[示例](examples/)（一篇虚构论文的两个版本）上的彩色输出：
+
+<p align="center"><img src="docs/demo.png" alt="arxiv-diff 在示例论文上的输出：表格结果 31.2 → 30.8（更差）、加粗标记移动、新增一行、正文三处数字变化、新增作者、Limitations 一节和一篇参考文献" width="900"></p>
+
 ## 安装
 
 ```bash

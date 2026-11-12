@@ -1,0 +1,60 @@
+<!doctype html>
+<!-- The repository's social preview (1280×640): docs/social-preview.png, rendered from this page with headless Chrome
+     (chrome --headless --screenshot --window-size=1280,640). The output is arxiv-diff's on Attention Is All You Need,
+     v1 against v7, shortened. -->
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; width: 1280px; height: 640px; overflow: hidden; }
+  body { background: radial-gradient(1100px 700px at 12% 8%, #2b1d12 0%, #12141a 55%, #0b0d11 100%); color: #e6edf3;
+    font-family: "Segoe UI", -apple-system, system-ui, sans-serif; display: grid; grid-template-columns: 420px 1fr; gap: 40px;
+    padding: 0 52px 0 70px; box-sizing: border-box; align-items: center; }
+  h1 { font-size: 64px; margin: 0 0 16px; letter-spacing: -1.5px; }
+  h1 span { color: #ffa657; }
+  .tag { font-size: 32px; line-height: 1.22; margin: 0 0 22px; font-weight: 600; }
+  .sub { font-size: 18.5px; line-height: 1.5; color: #b1bac4; margin: 0 0 26px; }
+  .pills { display: flex; gap: 9px; flex-wrap: wrap; }
+  .pills span { font-size: 14.5px; border: 1px solid #30363d; background: #161b22; border-radius: 999px; padding: 6px 12px; color: #c9d1d9; }
+  .term { background: #0d1117; border: 1px solid #30363d; border-radius: 12px; box-shadow: 0 26px 70px rgba(0,0,0,.55); overflow: hidden; }
+  .bar { display: flex; gap: 7px; align-items: center; padding: 11px 14px; background: #161b22; border-bottom: 1px solid #30363d; }
+  .bar i { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+  .bar b { margin-left: 10px; font: 600 13px "Segoe UI", sans-serif; color: #8b949e; }
+  pre { margin: 0; padding: 16px 18px 18px; font: 13.4px/1.62 Consolas, "Cascadia Mono", ui-monospace, monospace; color: #c9d1d9; white-space: pre-wrap; }
+  .p { color: #7ee787; } .g { color: #7ee787; } .r { color: #ff7b72; text-decoration: line-through; } .y { color: #e3b341; }
+  .n { color: #8b949e; } .h { color: #e6edf3; font-weight: 600; }
+</style>
+</head>
+<body>
+  <div>
+    <h1>arxiv-<span>diff</span></h1>
+    <p class="tag">What changed in v2?<br>Did the results?</p>
+    <p class="sub">Two versions of a paper, compared as a reader would: the numbers in its tables by row and column first, then the text, abstract, figures, authors and references.</p>
+    <div class="pills"><span>Any two arXiv versions</span><span>Side-by-side HTML</span><span>GitHub Action</span><span>JSON</span></div>
+  </div>
+  <div class="term">
+    <div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><b>arxiv-diff 1706.03762</b></div>
+<pre><span class="p">$</span> arxiv-diff 1706.03762
+<span class="h">v1 → v7  "Attention Is All You Need"</span>
+<span class="n">  2017-06-12 → 2023-08-02</span>
+  2 results changed in tables, 1 number in the text,
+  1 figure changed, 4 references added
+
+<span class="h">Tables</span>
+  tab:wmt-results
+    Transformer (big) · BLEU EN-FR: 41.0 → <span class="g">41.8</span>  (+0.8, better)
+  tab:variations
+    base · d_ff: 1024 → <span class="y">2048</span>
+    rows added: (E) positional embedding
+
+<span class="h">Abstract</span>
+  <span class="y">#</span> ...state-of-the-art BLEU score of <span class="r">41.0</span> <span class="g">41.8</span>
+    after training for 3.5 days on eight GPUs...
+
+<span class="h">Sections</span>
+  <span class="y">~</span> 3.2.1 Scaled Dot-Product Attention  <span class="n">+1 -1 ~2</span>
+  <span class="y">~</span> 5.4 Regularization  <span class="n">+0 -6 ~0</span>
+  <span class="y">~</span> 7 Conclusion  <span class="n">+1 -1 ~1</span></pre>
+  </div>
+</body>
+</html>

@@ -55,6 +55,10 @@ References
 Each of those changes is real (checked by hand in the two sources): the EN-FR result was corrected to 41.8, the base
 model's feed-forward size in Table 3 from 1024 to 2048.
 
+The same on [the example](examples/) (a made-up paper in two versions), in colour:
+
+<p align="center"><img src="docs/demo.png" alt="arxiv-diff's output on the example paper: a table result 31.2 → 30.8 (worse), the bold marker moved, a row added, three numbers changed in the text, an author, a Limitations section and a reference added" width="900"></p>
+
 ## Install
 
 ```bash
