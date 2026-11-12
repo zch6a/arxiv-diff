@@ -264,3 +264,23 @@ def test_a_row_whose_name_changed_a_little_is_still_compared(tmp_path: Path) -> 
     (t,) = compare(load(paper(tmp_path / "a", "59M", "93.0", ".32"), "a"), load(paper(tmp_path / "b", "60M", "92.5", ".30"), "b")).tables
     assert t.rows_renamed == [("ALBERT | xlarge | 59M", "ALBERT | xlarge | 60M")] and not t.rows_added
     assert [(c.column, c.old, c.new, c.kind) for c in t.cells] == [("SQuAD", "93.0", "92.5", "value"), ("MET", ".32", ".30", "value")]
+
+
+def test_authors_as_real_papers_write_them(tmp_path: Path) -> None:
+    """From the measurement: names separated by ~~~~~~~ (Longformer) or the paper's own spacing command (MAE),
+    footnote marks (Transformer), a list wrapped onto a second line (DINO, LoRA), affiliations after the names."""
+    from arxiv_diff.paper import load
+
+    author = r"""\newcommand{\authorskip}{\hspace{2.5mm}}
+\author{
+Iz Beltagy\Thanks{\enspace Equal contribution.}
+~~~~~~~~~Matthew E. Peters\textcolor{blue}{\footnotemark[1]} \authorskip Kaiming He$^{*,\dagger}$\\
+Julien Mairal$^{2}$~~~~~~~\textbf{Yuanzhi Li}\\[2mm]
+\small $^{*}$equal technical contribution \\
+Allen Institute for Artificial Intelligence, Seattle, WA, USA\\
+{\tt $\{$beltagy$\}$@allenai.org}}"""
+    (tmp_path / "p").mkdir()
+    (tmp_path / "p" / "main.tex").write_text(
+        "\\documentclass{article}\n" + author + "\n\\begin{document}\n\\maketitle\nText here.\n\\end{document}\n", encoding="utf-8"
+    )
+    assert load(tmp_path / "p", "p").authors == ["Iz Beltagy", "Matthew E. Peters", "Kaiming He", "Julien Mairal", "Yuanzhi Li"]

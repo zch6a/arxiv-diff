@@ -170,6 +170,8 @@ def text(d: Diff, color: bool = False, limit: int = 6, about: str = "") -> str:
                 out.append(f"      {visible(column)}: {_plural(len(rows_), 'cell')} emptied (was {visible(value)}): {_rows(rows_)}")
             for (column, value), rows_ in filled.items():
                 out.append(f"      {visible(column)}: {_plural(len(rows_), 'cell')} filled in ({visible(value)}): {_rows(rows_)}")
+            if t.columns_renamed and t.status == "changed":
+                out.append("      columns renamed: " + "; ".join(f"{visible(o)} → {visible(n)}" for o, n in t.columns_renamed[:12]))
             if t.rows_renamed and t.status == "changed":
                 out.append("      rows renamed: " + "; ".join(f"{visible(o)} → {visible(n)}" for o, n in t.rows_renamed[:12]))
             for what, keys in (

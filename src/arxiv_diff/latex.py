@@ -511,35 +511,61 @@ NOT_A_NAME = re.compile(
     r"\b(?:universit\w*|institut\w*|college|school|department|dept|laborator\w*|lab|labs|research|inc|ltd|llc|corp"
     r"|corporation|company|centre|center|academy|faculty|google|deepmind|microsoft|meta|facebook|openai|amazon|nvidia"
     r"|apple|ibm|intel|baidu|alibaba|tencent|huawei|bytedance|anonymous|authors?|equal|contribution|correspond\w*"
-    r"|email|e-mail|address|street|road|usa|china|germany|france|canada|japan|korea|uk|city|state|province)\b",
+    r"|email|e-mail|address|street|road|usa|china|germany|france|canada|japan|korea|uk|city|state|province"
+    r"|engineering|sciences?|informatics|computing|technology|polytechnic|hospital|foundation|ai2"
+    r"|mit|cmu|stanford|berkeley|harvard|princeton|oxford|cambridge|eth|epfl|inria|mila|tsinghua|peking|kaist|ucla|ucl"
+    r"|nyu|toronto|montreal|zurich|zürich|tübingen|tuebingen|edinburgh|imperial|cornell|columbia|yale|caltech|ntu|nus)\b",
     re.I,
 )
 
 
 OUT_OF_NAMES = re.compile(
-    r"\\(?:thanks|footnote|texttt|email|url|href|affiliation|institute|inst|affil|orcid|orcidID|IEEEauthorrefmark|footnotemark)"
-    r"\s*(?:\[[^\]]*\])?\s*\{(?:[^{}]|\{[^{}]*\})*\}"
+    r"\\(?:thanks|Thanks|footnote|texttt|tt|email|url|href|affiliation|institute|inst|affil|orcid|orcidID|IEEEauthorrefmark)"
+    r"\s*(?:\[[^\]]*\])?\s*\{(?:[^{}]|\{[^{}]*\})*\}|\\footnotemark(?:\[[^\]]*\])?|\\(?:small|footnotesize|scriptsize)\b"
 )
+# what separates one author from the next (or a name from what follows it)
+NAME_SEPARATOR = re.compile(
+    r"\\(?:quad|qquad|enspace|hfill|newline|And|AND|and)\b|\\hspace\*?\{[^}]*\}|\\hskip\s*[\d.]+\w*|\\\\(?:\[[^\]]*\])?|~{2,}|&|,|;"
+    r"|\band\b|\n\s*\n"
+)
+
+
+def _name(piece: str) -> str:
+    r"""A piece of an author block as a person's name, or "" when it is not one.
+
+    >>> _name("Noam Shazeer[1]"), _name("Ed H. Chi"), _name("Engineering"), _name("Runway ML"), _name("Google Brain")
+    ('Noam Shazeer', 'Ed H. Chi', '', '', '')
+    """
+    name = re.sub(r"\[[^\]]*\]|[*†‡§¶∗⋆♠♣♢♡\d]+", "", piece).strip(" .:()")
+    words = name.split()
+    if not 2 <= len(words) <= 6 or not re.search(r"[^\W\d_]", name) or "@" in name or NOT_A_NAME.search(name):
+        return ""
+    if any(len(w) >= 2 and w.isupper() and w.isalpha() for w in words):  # IWR, ML: a place or a company
+        return ""
+    return name if any(w[:1].isupper() for w in words) else ""
 
 
 def authors(src: Source) -> list[str]:
     """The authors' names, in order, from \\author (any template's way of listing them), \\icmlauthor and IEEE
-    blocks; affiliations, e-mail addresses and footnotes left out."""
+    blocks: in each group of authors, the names until the first affiliation or e-mail address; footnotes and marks
+    left out."""
     names: list[str] = []
     for m in AUTHOR.finditer(src.text):
         end = _matching(src.text, m.end(), "{", "}")
         if end < 0:
             continue
-        block = src.text[m.end() : end]
+        block = expand_macros(src.text[m.end() : end], src.macros)  # \authorskip and such
         block = OUT_OF_NAMES.sub(" ", block)
-        block = re.sub(r"\$[^$]*\$|\\textsuperscript\{[^}]*\}|\^\{?[^}\s]*\}?", " ", block)
-        for chunk in re.split(r"\\(?:and|And|AND)\b|\\quad|\\qquad|\\hspace\*?\{[^}]*\}|\\\\\s*\\\\|&", block):
-            first = re.split(r"\\\\|\\newline|\n\s*\n", chunk.strip())[0]
-            for part in re.split(r",|;|\band\b|\s&\s", detex(first, src.macros)):
-                name = re.sub(r"[*†‡§¶∗⋆♠♣♢♡\d]+", "", part).strip(" .")
-                words = name.split()
-                looks_like_one = 1 <= len(words) <= 6 and any(w[:1].isupper() for w in words) and re.search(r"[^\W\d_]", name)
-                if looks_like_one and not NOT_A_NAME.search(name) and "@" not in name and name not in names:
+        block = re.sub(r"\$[^$]*\$|\\textsuperscript\{[^}]*\}|\^\{?[^}\s]*\}?|\\vspace\*?\{[^}]*\}", " ", block)
+        for group in re.split(r"\\(?:and|And|AND)\b", block):
+            for piece in NAME_SEPARATOR.split(group):
+                plain = detex(piece, src.macros)
+                if not plain.strip():
+                    continue
+                if NOT_A_NAME.search(plain) or "@" in plain:
+                    break  # the group's affiliations begin
+                name = _name(plain)
+                if name and name not in names:
                     names.append(name)
     return names
 

@@ -41,7 +41,7 @@ def audit(ta: Table, tb: Table, td: TableDiff) -> tuple[Counter[str], Counter[st
     """Numbers that left the old table and arrived in the new one, without a reported change to explain them."""
     from arxiv_diff.diff import columns
 
-    gone_cols = {j for j, k in enumerate(columns(ta)) if k in td.columns_removed}
+    gone_cols = {j for j, k in enumerate(columns(ta)) if k in td.columns_removed}  # renamed columns are compared, not here
     new_cols = {j for j, k in enumerate(columns(tb)) if k in td.columns_added}
     old = numbers(ta, set(td.rows_removed), gone_cols)
     new = numbers(tb, set(td.rows_added), new_cols)

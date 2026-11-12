@@ -394,6 +394,7 @@ class TableDiff:
     columns_added: list[str] = field(default_factory=list)
     columns_removed: list[str] = field(default_factory=list)
     rows_renamed: list[tuple[str, str]] = field(default_factory=list)  # (old, new): its name changed, its cells compared
+    columns_renamed: list[tuple[str, str]] = field(default_factory=list)
 
 
 def _norm(s: str) -> str:
@@ -530,8 +531,15 @@ def diff_table(a: Table, b: Table) -> TableDiff:
     renamed_a = set(renamed.values())
     d.rows_added = [k for i, k in left_b if i not in renamed]
     d.rows_removed = [k for i, k in left_a if i not in renamed_a]
-    d.columns_added = [k for k in cb if _norm(k) not in col_a]
-    d.columns_removed = [k for k in ca if _norm(k) not in col_b]
+    # columns whose header changed a little ("WikiSQL Accuracy (%)" -> "WikiSQL Acc. (%)"): paired by header, in order
+    left_ca = [(j, k) for j, k in enumerate(ca) if _norm(k) not in col_b]
+    left_cb = [(j, k) for j, k in enumerate(cb) if _norm(k) not in col_a]
+    for x, y in _pair([k for _, k in left_ca], [k for _, k in left_cb], 0.5):
+        col_a[_norm(left_cb[y][1])] = left_ca[x][0]
+        d.columns_renamed.append((left_ca[x][1], left_cb[y][1]))
+    renamed_cols = {o for o, _ in d.columns_renamed} | {n for _, n in d.columns_renamed}
+    d.columns_added = [k for k in cb if _norm(k) not in col_a and k not in renamed_cols]
+    d.columns_removed = [k for k in ca if _norm(k) not in col_b and k not in renamed_cols]
     for i_b, rkey in rb:
         i_a = row_a.get(_norm(rkey), renamed.get(i_b))
         if i_a is None:
@@ -561,7 +569,7 @@ def diff_table(a: Table, b: Table) -> TableDiff:
                 way = direction(ckey) or direction(b.caption)  # "BLEU scores" over columns named EN-DE, EN-FR
                 better = (v_b > v_a) == (way == "higher") if way else None
             d.cells.append(CellChange(rkey, ckey, t_a, t_b, v_a, v_b, kind, bold_a, bold_b, line, better))
-    if d.cells or d.caption or d.rows_added or d.rows_removed or d.columns_added or d.columns_removed or d.rows_renamed:
+    if d.cells or d.caption or d.rows_added or d.rows_removed or d.columns_added or d.columns_removed or d.rows_renamed or d.columns_renamed:
         d.status = "changed"
     return d
 
@@ -641,8 +649,14 @@ def diff_figures(a: list[Figure], b: list[Figure]) -> list[FigureDiff]:
 
 
 def _person(name: str) -> str:
+    """A name compared without accents, case or middle initials: "Ed H. Chi" is "Ed Chi".
+
+    >>> _person("Ed H. Chi") == _person("Ed Chi"), _person("Björn Ommer")
+    (True, 'bjorn ommer')
+    """
     s = unicodedata.normalize("NFKD", name)
-    return " ".join(re.findall(r"[a-z]+", "".join(c for c in s if not unicodedata.combining(c)).lower()))
+    words = re.findall(r"[a-z]+", "".join(c for c in s if not unicodedata.combining(c)).lower())
+    return " ".join([words[0], words[-1]] if len(words) > 2 else words)
 
 
 @dataclass
