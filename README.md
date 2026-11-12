@@ -129,7 +129,23 @@ outputs `report` (JSON) and `markdown` are files you can post as a comment in a 
 
 ## How well it works
 
-MEASUREMENT
+Measured on 20 well-known papers that have several arXiv versions (v1 against the latest; BERT, ALBERT, ViT, Swin,
+LoRA, Longformer, GPT-3, DDPM, Latent Diffusion, Chain-of-Thought, FlashAttention and others), with
+[`scripts/measure_versions.py`](scripts/measure_versions.py):
+
+| | |
+|---|---|
+| **Tables, audited** | 389 pairs of tables. The audit is independent of the report: every number that left a table or arrived in it must be explained by a reported change (a changed or cleared cell, a row or column added or removed). Unexplained: **0** |
+| **Table results changed** | 131 reported; **69 checked by hand** in the two sources, all real (ViT's corrected exaFLOPs, ALBERT's re-run results, LoRA's new baselines, Latent Diffusion's new text-to-image model, BERT's QNLI 91.1 → 92.7, ...) |
+| **Numbers changed in the text** | 30, each read in its sentence: all real edits (BERT's abstract, ALBERT's gains, Swin's 86.4 → 87.3 and 60 → 90 epochs, ...) |
+| **Authors** | right in all 40 versions; the 3 changes reported (RoFormer, LoRA, Chain-of-Thought gained authors) are real |
+
+Measuring found what tests had not, and each case is now a test: a row and its starred twin read as one row
+(Swin), a change in the second number of a cell like `89.3/82.1` missed (ALBERT), rows and columns whose names
+changed a little left unpaired (ALBERT's `59M` → `60M`, LoRA's `Accuracy` → `Acc.`), and, between two rows named
+alike, the wrong one paired (LoRA's two Adapter rows: now the one with the old row's results), cells written with
+the paper's own command (`\cell{6.5}{0.4}`), years inside citation keys taken for changed numbers, and author lists
+wrapped over two lines.
 
 ## Limits
 

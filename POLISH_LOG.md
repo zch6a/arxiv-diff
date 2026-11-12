@@ -67,3 +67,34 @@ Skill, READMEs, CI, release.
   spaced as the new version spaces it, and the highlight starts after the space (terminal, Markdown and HTML).
 
 Tests: 33, Python 3.10 and 3.14; ruff, mypy clean.
+
+### 2026-11-13 — the GitHub Action, the docs, and measuring on 20 real papers
+
+- **The Action** (`action.yml`): the paper in a pull request against its base commit (or any ref, or a folder);
+  the Markdown report in the job summary, JSON and Markdown files as outputs; `fail-on: results` to fail when a
+  number changed. CI runs it on the example's two versions and checks what it finds. Also: release workflow, Skill
+  and plugin, READMEs (English, Chinese), SECURITY, CONTRIBUTING, CHANGELOG, demo image, social preview.
+- **The measurement** (`scripts/measure_versions.py`): v1 against the latest version of the 20 papers with several
+  versions among paper-proof's 50 (sources fetched at one request every 3 seconds into the scratchpad, deleted
+  afterwards). Besides the report it audits every pair of tables independently: each number that left a table or
+  arrived in it must be explained by a reported change. Seven runs; each found something, fixed with a test from the
+  real case:
+
+| run | found | fix |
+|---|---|---|
+| 1 | Swin: `Swin-L (HTC++)` and `Swin-L (HTC++)*` read as one row: 4 false changes | names keep their marks; duplicates numbered after normalising |
+| 1 | ALBERT: `89.3/82.1 → 89.3/82.3` missed (only a cell's first number was compared) | every number in a cell compared; formatting (`±0.2` vs `\textsubscript\pm.2`) is not a change |
+| 1 | GPT-3: a table whose every row was renamed ("Completion" → "Target Completion") unpaired | pairing by file, shape and columns |
+| 2 | text: years in citation keys, `12288 → 12,288`, `$4.6$k → 4,600`, `WikiText-103` as minus 103 (11 false) | citations one token; values compared with k/M/B; no minus after a letter |
+| 2 | Chain-of-Thought: cells `\cell{6.5}{0.4}` not numbers | the paper's commands with arguments expanded before tables are read |
+| 4 | ALBERT: the row `xlarge | 59M` became `| 60M`: its 5 changed results unseen | rows named alike paired as renamed, their cells compared |
+| 4 | LoRA: `.32` cells not numbers | numbers without a leading zero |
+| 5 | LoRA: columns `Accuracy (%)` → `Acc. (%)`: 4 changed results unseen | columns paired as renamed too |
+| 5 | authors: LoRA's list wrapped over two lines (a false "removed"), footnote marks, affiliations as names, 4 papers with none found | authors read per group until the first affiliation; middle initials ignored when comparing |
+| 6 | LoRA: v1's one Adapter row paired with the wrong one of v2's two (3 false changes) | between rows named alike, the one with the old row's numbers |
+
+Final run: 131 table results changed, 69 checked by hand in the sources (all real); 30 numbers changed in the text,
+all real edits; 0 unexplained numbers in 389 audited table pairs; authors right in all 40 versions (3 real changes).
+The sources are deleted.
+
+Tests: 44, Python 3.10 and 3.14; ruff, mypy clean.

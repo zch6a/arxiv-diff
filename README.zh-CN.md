@@ -113,7 +113,16 @@ jobs:
 
 ## 效果如何
 
-MEASUREMENT
+在 20 篇有多个 arXiv 版本的知名论文上测量（v1 对比最新版本；BERT、ALBERT、ViT、Swin、LoRA、Longformer、GPT-3、DDPM、Latent Diffusion、Chain-of-Thought、FlashAttention 等），脚本见 [`scripts/measure_versions.py`](scripts/measure_versions.py)：
+
+| | |
+|---|---|
+| **表格审计** | 389 对表格。审计独立于报告：每个从表格里消失或新出现的数字，都必须由报告中的某处改动解释（单元格改动或清空、行列增删）。无法解释的：**0** |
+| **表格结果变化** | 报告 131 处；其中 **69 处在两个版本的源码里人工核对**，全部属实（ViT 更正的 exaFLOPs、ALBERT 重跑的结果、LoRA 新增的基线、Latent Diffusion 新的文生图模型、BERT 的 QNLI 91.1 → 92.7 等） |
+| **正文数字变化** | 30 处，逐句阅读：全部是真实改动（BERT 摘要、ALBERT 的提升幅度、Swin 的 86.4 → 87.3 和 60 → 90 epochs 等） |
+| **作者** | 40 个版本全部读对；报告的 3 处变化（RoFormer、LoRA、Chain-of-Thought 新增作者）属实 |
+
+测量发现了测试没覆盖的问题，每一个现在都有测试：一行和它带星号的同名行被当成一行（Swin）；`89.3/82.1` 这类单元格里第二个数的变化被漏掉（ALBERT）；名字稍有变化的行和列没配上（ALBERT 的 `59M` → `60M`、LoRA 的 `Accuracy` → `Acc.`）；两行名字相近时配错了行（LoRA 的两个 Adapter 行，现在按结果数字选对那一行）；用论文自定义命令写的单元格（`\cell{6.5}{0.4}`）；引用 key 里的年份被当成数字变化；跨两行的作者列表。
 
 ## 局限
 
