@@ -1,0 +1,66 @@
+name: arxiv-diff
+description: What changed in your paper in this pull request. Result numbers in its tables, sentences, abstract, authors, figures and references, compared with the base branch.
+author: zch6a
+branding:
+  icon: git-pull-request
+  color: orange
+inputs:
+  path:
+    description: The LaTeX project folder or its main .tex file (relative to the repository)
+    default: "."
+  base:
+    description: 'The git ref of the old version (default: the pull request''s base commit; on a push, the commit before)'
+    default: ""
+  old:
+    description: A folder holding the old version, instead of a git ref
+    default: ""
+  fail-on:
+    description: '"never" (default), "results" (a number changed in a table or the text) or "any"'
+    default: never
+outputs:
+  report:
+    description: Path of the JSON report
+    value: ${{ steps.run.outputs.report }}
+  markdown:
+    description: Path of the Markdown report (to post as a comment in a later step)
+    value: ${{ steps.run.outputs.markdown }}
+runs:
+  using: composite
+  steps:
+    # The tool at this action's own ref; the paper's LaTeX is read, never run.
+    - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3; it has no moving major tag
+    - id: run
+      shell: bash
+      env:
+        PAPER: ${{ inputs.path }}
+        BASE: ${{ inputs.base }}
+        OLD: ${{ inputs.old }}
+        FAIL_ON: ${{ inputs.fail-on }}
+        PR_BASE: ${{ github.event.pull_request.base.sha }}
+        PUSH_BEFORE: ${{ github.event.before }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        report="$RUNNER_TEMP/arxiv-diff.json"
+        md="$RUNNER_TEMP/arxiv-diff.md"
+        old="$OLD"
+        if [ -z "$old" ]; then
+          ref="${BASE:-${PR_BASE:-$PUSH_BEFORE}}"
+          if [ -z "$ref" ] || [ "$ref" = "0000000000000000000000000000000000000000" ]; then
+            ref="HEAD~1"
+          fi
+          # the old version's files only (a shallow checkout may not have the commit yet)
+          git cat-file -e "$ref^{commit}" 2>/dev/null || git fetch --no-tags --depth=1 origin "$ref"
+          old="$RUNNER_TEMP/arxiv-diff-old"
+          mkdir -p "$old"
+          git archive "$ref" -- "$PAPER" | tar -x -C "$old"
+          old="$old/$PAPER"
+        fi
+        set +e
+        uvx --from "$ACTION_PATH" arxiv-diff --format markdown -o "$md" -- "$old" "$PAPER"
+        cat "$md" >> "$GITHUB_STEP_SUMMARY"
+        uvx --from "$ACTION_PATH" arxiv-diff --format json --fail-on "$FAIL_ON" -o "$report" -- "$old" "$PAPER"
+        code=$?
+        set -e
+        echo "report=$report" >> "$GITHUB_OUTPUT"
+        echo "markdown=$md" >> "$GITHUB_OUTPUT"
+        exit $code

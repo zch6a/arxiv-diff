@@ -1,0 +1,46 @@
+% A made-up paper, in two versions, to show what arxiv-diff reports. Nothing here is a real result.
+\documentclass{article}
+\usepackage{booktabs}
+\newcommand{\method}{TinyFormer}
+\title{\method: Small Attention Models for Toy Translation}
+\author{Ada Lovelace \\ Analytical Engines Ltd \And Charles Babbage \\ Difference Lab}
+\begin{document}
+\maketitle
+\begin{abstract}
+We present \method, a small attention model for translating toy languages.
+It reaches 31.2 BLEU on ToyWMT, 2.1 points above the best recurrent model.
+\end{abstract}
+
+\section{Introduction}
+Recurrent models translate toy languages well but slowly~\cite{elman1990}.
+We ask whether attention alone suffices at small scale.
+
+\section{Method}
+\method{} stacks four attention layers of width 256.
+Each layer has eight heads.
+
+\section{Experiments}
+We train on ToyWMT for 20 epochs.
+Table~\ref{tab:main} shows that \method{} reaches 31.2 BLEU.
+
+\begin{table}[t]
+\centering
+\caption{BLEU on the ToyWMT test set.}\label{tab:main}
+\begin{tabular}{lcc}
+\toprule
+Model & EN-XX & XX-EN \\
+\midrule
+GRU & 29.1 & 27.8 \\
+LSTM & 28.7 & 28.0 \\
+\method{} & \textbf{31.2} & \textbf{29.4} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Conclusion}
+Attention alone is enough for toy translation.
+We will release the code soon.
+
+\bibliographystyle{plain}
+\bibliography{refs}
+\end{document}

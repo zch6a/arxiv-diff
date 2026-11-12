@@ -1,0 +1,126 @@
+<div align="center">
+
+# arxiv-diff
+
+**一篇论文的两个版本之间改了什么，结果变没变？** arxiv-diff 读两个版本的 LaTeX，先告诉你结果表里哪些数字变了（按行和列：
+“Transformer (big) · BLEU EN-FR: 41.0 → 41.8”），再列出正文里变了的数字、摘要和结论的改动、每一节增删改的句子、图、作者和参考文献。
+任意两个 arXiv 版本、两个 LaTeX 文件夹，或你自己论文仓库的两个提交都行。
+
+<a href="https://github.com/zch6a/arxiv-diff/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/zch6a/arxiv-diff/actions/workflows/ci.yml/badge.svg"></a>
+<img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-blue">
+<a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-blue"></a>
+
+[English](README.md) · **简体中文**
+
+</div>
+
+---
+
+arXiv 保存了论文的每个版本，却只给你看 PDF。审稿人核对修改稿、读者引用某个数字、复现结果的团队，都想知道自己依赖的数字是否还是论文里的那个。
+对 LaTeX 做文本 diff，会被重新折行和挪动的段落淹没；latexdiff 生成一份标注过的 PDF，你还得从头读到尾。arxiv-diff 比较的是论文说了什么，并把结果放在最前面。
+
+它在 *Attention Is All You Need* 上的真实输出（v1，2017 年 6 月，对比 v7，2023 年 8 月；有删节）：
+
+```text
+$ arxiv-diff 1706.03762
+arxiv-diff: v1 → v7  1706.03762 "Attention Is All You Need" (2017-06-12 → 2023-08-02)
+  prose 3,711 → 3,831 words, 4% of the old text rewritten or removed
+  sentences +9 -8 ~17 changed
+  2 results changed in tables, 1 number changed in the text, 1 figure changed, 4 references added
+
+Tables
+  changed  tab:wmt-results  results.tex:8
+      Transformer (big) · BLEU EN-FR: 41.0 → 41.8  (+0.8, better)
+  changed  tab:variations  results.tex:54
+      base · $d_{\text{ff}}$: 1024 → 2048  (+1024)
+      params $\times10^6$: 8 cells emptied (was 65): (A); (A) (2); (A) (3); (A) (4); (D); (D) (2); ... (8)
+      rows added: (E) | positional embedding instead of sinusoids
+
+Numbers in the text
+  Abstract  ms.tex:127  ...art BLEU score of 41.0 → 41.8 after training for 3.5...
+```
+
+上面每一处改动都在两个版本的源码里人工核对过：EN-FR 结果改成了 41.8，表 3 里 base 模型的前馈维度从 1024 改成了 2048。
+
+## 安装
+
+```bash
+uv tool install git+https://github.com/zch6a/arxiv-diff     # 或：pipx install git+https://github.com/zch6a/arxiv-diff
+```
+
+不安装、只跑一次：`uvx --from git+https://github.com/zch6a/arxiv-diff arxiv-diff 1706.03762`。
+
+## 用法
+
+```bash
+arxiv-diff 2106.09685                     # v1 对比最新版本
+arxiv-diff 2106.09685v2                   # v1 对比 v2
+arxiv-diff 1706.03762v3 1706.03762v7      # 任意两个版本
+arxiv-diff 1706.03762 --all               # 每个版本对比下一个
+arxiv-diff paper-v1/ paper-v2/            # 两个 LaTeX 文件夹（或两个主 .tex 文件）
+```
+
+| 选项 | |
+|---|---|
+| `--format html -o diff.html` | 一个自包含的网页：两个版本并排，表格在前，可筛选“只看数字变了的句子” |
+| `--format markdown` | 用于 PR 评论或 job summary（论文里的内容不会渲染成链接、图片或 HTML） |
+| `--format json` | 全部内容，两边都带文件和行号 |
+| `--full` | 终端里显示每一个改动的句子（默认每节只显示几条） |
+| `--fail-on results` / `any` | 数字变了 / 任何内容变了时退出码为 1 |
+| `--keep DIR` | 保留从 arXiv 取来的源码（默认用完即删） |
+
+## 比较什么
+
+| | |
+|---|---|
+| **表格** | 先按 `\label`，再按标题，再按行列配对；单元格按行名和列名对齐，行挪了位置也还是同一行。报告变了的数字（带差值；列的指标或 ↑/↓ 说明方向时标“更好/更差”）、改动或清空的单元格、加粗“最佳”标记的移动、增删的行和列、表格标题 |
+| **正文里的数字** | 句子中每个变了的数字及其上下文；`#` 标出只有数字变了的句子 |
+| **章节** | 先按标题、再按内容配对：改名的节还是同一节，挪动的节标为 moved；节内按句子配对，改动的句子给出词级 diff；挪到别的节的句子标为“移动”，不算删除加新增 |
+| **摘要、结论** | 单独列出 |
+| **前置信息** | 标题；作者的增删和顺序变化（不含单位、邮箱和脚注） |
+| **图** | 增删、所显示的图片文件、图注 |
+| **参考文献** | 引用的文献增删（只改 key 不算），以及从预印本变成正式发表版本的条目 |
+
+LaTeX 的读取方式与 [paper-proof](https://github.com/zch6a/paper-proof) 相同：跟随 `\input` 和 `\include`，去掉注释和 `\iffalse` 块。
+文档里不带参数的自定义宏会被展开（`\newcommand{\method}{FooNet}`），文字读起来就是论文印出来的样子；引用显示为 `[keys]`，交叉引用显示为 `(labels)`，公式保持原样。
+
+## 在 Pull Request 里用
+
+论文放在 git 仓库里写时：把这次 PR 对论文的改动写进 job summary。
+
+```yaml
+on: pull_request
+permissions:
+  contents: read
+jobs:
+  paper:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: zch6a/arxiv-diff@v0
+        with:
+          path: paper            # LaTeX 文件夹
+          fail-on: never         # 或 "results"：有数字变化就失败
+```
+
+旧版本默认是 PR 的 base 提交（用 `base:` 指定其他 ref，或用 `old:` 指定一个文件夹）。输出 `report`（JSON）和 `markdown` 是文件，可以在后续步骤里发成评论。
+
+## 效果如何
+
+MEASUREMENT
+
+## 局限
+
+- 比较的是 LaTeX。只在图片里变了的数字，或只提交了 PDF 的版本，看不到。带参数的宏按原文比较。
+- 表格由 paper-proof 的解析器读取（`tabular`、`tabularx`、`longtable`、`\multicolumn`、`\multirow`、booktabs）；用别的方式画的表格按文字比较，或比较不到。
+- 改得面目全非的句子显示为一删一增。
+
+## 同一套工具
+
+[paper-proof](https://github.com/zch6a/paper-proof) 检查论文的参考文献，以及正文数字与自身表格是否一致；[submit-check](https://github.com/zch6a/submit-check) 按会议的投稿规则检查论文。
+
+## 许可证
+
+MIT

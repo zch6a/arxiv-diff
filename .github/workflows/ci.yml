@@ -1,0 +1,57 @@
+name: CI
+on: [push, pull_request]
+# Read-only: tests need no write access.
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.10", "3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      # Actions pinned to commits; the token is not left in the checkout.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3; it has no moving major tag
+        with:
+          python-version: ${{ matrix.python }}
+      # No test reaches the network: the papers are written by the tests, and arXiv is a fake.
+      - run: uv run pytest -q
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy
+  # The action itself: the example paper's two versions; and a version taken from git (here HEAD itself: no changes).
+  action:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - id: diff
+        uses: ./
+        with:
+          path: examples/v2
+          old: examples/v1
+      - name: The example's changes are found
+        env:
+          REPORT: ${{ steps.diff.outputs.report }}
+        run: |
+          python3 - "$REPORT" <<'EOF'
+          import json, sys
+          r = json.load(open(sys.argv[1]))
+          cells = [(c["row"], c["column"], c["old"], c["new"]) for t in r["tables"] for c in t["cells"] if c["kind"] == "value"]
+          assert cells == [("TinyFormer", "EN-XX", "31.2", "30.8")], cells
+          assert r["summary"]["text_numbers_changed"] == 3 and r["authors"]["added"] == ["Grace Hopper"], r["summary"]
+          print("found:", cells)
+          EOF
+      - id: git
+        uses: ./
+        with:
+          path: examples/v2
+          base: HEAD
+      - run: test -s "${{ steps.git.outputs.markdown }}"

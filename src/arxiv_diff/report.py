@@ -103,16 +103,20 @@ def headline(d: Diff) -> list[str]:
 
 def _words(c: Change, color: bool) -> str:
     out = []
+    prev = "="
     for op, t in c.words:
         t = visible(t)
         if op == "=":
             out.append(t)
         else:
             lead, core = t[: len(t) - len(t.lstrip())], t.lstrip()
+            if op == "+" and prev == "-":
+                lead = " " if lead else ""  # one space between what was removed and what replaced it
             if color:
                 out.append(lead + (f"{RED}\x1b[9m{core}{RESET}" if op == "-" else f"{GREEN}{core}{RESET}"))
             else:
                 out.append(lead + (f"[-{core}-]" if op == "-" else f"{{+{core}+}}"))
+        prev = op
     return "".join(out)
 
 
@@ -205,7 +209,7 @@ def text(d: Diff, color: bool = False, limit: int = 6, about: str = "") -> str:
 
     concl = [sd for sd in d.sections if is_conclusion(sd) and sd.status != "same"]
     for sd in concl:
-        out += ["", paint(BOLD, f"Conclusion: {visible(sd.name)}")]
+        out += ["", paint(BOLD, visible(sd.name))]
         out += [f"  {_change_line(c, color)}" for c in sd.changes]
 
     out += ["", paint(BOLD, "Sections")]
@@ -261,11 +265,16 @@ def _counts(sd: SectionDiff) -> str:
 
 def _md_words(c: Change) -> str:
     out = []
+    prev = "="
     for op, t in c.words:
         if op == "=":
             out.append(_md(t))
+            prev = op
             continue
         lead, core, trail = re.match(r"(\s*)(.*?)(\s*)$", t, re.S).groups()  # type: ignore[union-attr]
+        if op == "+" and prev == "-" and lead:
+            lead = " "
+        prev = op
         if core:
             out.append(lead + (f"~~{_md(core)}~~" if op == "-" else f"**{_md(core)}**") + trail)
         else:
