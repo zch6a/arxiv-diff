@@ -307,8 +307,22 @@ def markdown(d: Diff, about: str = "", limit: int = 30, budget: int = 60_000) ->
         return "\n".join([*out, "", "No changes."]) + "\n"
 
     value_changes = [(t, c) for t in d.tables for c in t.cells]
+    structure = [
+        t
+        for t in d.tables
+        if t.status in ("added", "removed")
+        or t.rows_added
+        or t.rows_removed
+        or t.columns_added
+        or t.columns_removed
+        or t.rows_renamed
+        or t.columns_renamed
+        or t.caption
+    ]
+    if value_changes or structure:
+        out += ["", "#### Tables", ""]
     if value_changes:
-        out += ["", "#### Tables", "", "| table | row | column | old | new | change |", "|---|---|---|---:|---:|---|"]
+        out += ["| table | row | column | old | new | change |", "|---|---|---|---:|---:|---|"]
         for t, c in value_changes[:200]:
             change = (
                 f"{delta(c)} {verdict(c)}".strip()
@@ -320,13 +334,19 @@ def markdown(d: Diff, about: str = "", limit: int = 30, budget: int = 60_000) ->
             out.append(f"| {_md(t.name)} | {_md(c.row)} | {_md(c.column)} | {_md(c.old)} | {_md(c.new)} | {_md(change)} |")
         if len(value_changes) > 200:
             out.append(f"\n… and {len(value_changes) - 200} more cells (the JSON report has all).")
-    structure = [t for t in d.tables if t.status in ("added", "removed") or t.rows_added or t.rows_removed or t.columns_added or t.columns_removed]
+        out.append("")  # a list right under a table would be read as more rows
     for t in structure:
-        bits = [f"{len(t.rows_added)} rows added"] if t.rows_added and t.status == "changed" else []
-        bits += [f"{len(t.rows_removed)} rows removed"] if t.rows_removed and t.status == "changed" else []
+        if t.status != "changed":
+            out.append(f"- table {_md(t.name)}: {t.status}")
+            continue
+        bits = [f"{len(t.rows_added)} rows added"] if t.rows_added else []
+        bits += [f"{len(t.rows_removed)} rows removed"] if t.rows_removed else []
+        bits += [f"{len(t.rows_renamed)} rows renamed"] if t.rows_renamed else []
         bits += [f"columns added: {', '.join(t.columns_added)}"] if t.columns_added else []
         bits += [f"columns removed: {', '.join(t.columns_removed)}"] if t.columns_removed else []
-        out.append(f"- table {_md(t.name)}: {_md(t.status if t.status != 'changed' else '; '.join(bits))}")
+        bits += ["columns renamed: " + ", ".join(f"{o} → {n}" for o, n in t.columns_renamed)] if t.columns_renamed else []
+        bits += ["caption changed"] if t.caption else []
+        out.append(f"- table {_md(t.name)}: {_md('; '.join(bits))}")
 
     if d.title or d.authors.changed:
         out += ["", "#### Title and authors", ""]

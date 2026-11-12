@@ -46,3 +46,13 @@ def test_several_steps_on_one_page(tmp_path: Path) -> None:
     html = page([(compare(v1, v2), ""), (compare(v2, v3), "")])
     assert '<a href="#d0">v1 → v2</a>' in html and '<a href="#d1">v2 → v3</a>' in html
     assert '<section id="d1">' in html and "<ins>29.1</ins>" in html
+
+
+def test_markdown_lists_table_changes_after_a_blank_line(tmp_path: Path) -> None:
+    """A list right under a Markdown table is read by GitHub as more table rows; rows added, renamed and a changed
+    caption are listed."""
+    from arxiv_diff.report import markdown
+
+    d = compare(version(tmp_path, "v1"), version(tmp_path, "v2", BIG="28.9", ROWS=r"Transformer (base) & 27.3 & 38.1 \\"))
+    md = markdown(d)
+    assert "| tab:main | Transformer (big) | EN-DE | 28.4 | 28.9 | +0.5 better |\n\n- table tab:main: 1 rows added" in md
