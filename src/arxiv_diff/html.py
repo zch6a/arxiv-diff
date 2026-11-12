@@ -162,6 +162,8 @@ def _tables(d: Diff) -> str:
         emptied, filled = _grouped(t.cells)
         notes += [f"{_e(col)}: {len(r)} cells emptied (were {_e(v)}): {_e('; '.join(r))}" for (col, v), r in emptied.items()]
         notes += [f"{_e(col)}: {len(r)} cells filled in ({_e(v)}): {_e('; '.join(r))}" for (col, v), r in filled.items()]
+        if t.status == "changed" and t.rows_renamed:
+            notes.append("rows renamed: " + _e("; ".join(f"{o} → {n}" for o, n in t.rows_renamed)))
         if t.status == "changed":
             for what, keys in (
                 ("rows added", t.rows_added),

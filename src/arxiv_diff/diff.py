@@ -393,6 +393,7 @@ class TableDiff:
     rows_removed: list[str] = field(default_factory=list)
     columns_added: list[str] = field(default_factory=list)
     columns_removed: list[str] = field(default_factory=list)
+    rows_renamed: list[tuple[str, str]] = field(default_factory=list)  # (old, new): its name changed, its cells compared
 
 
 def _norm(s: str) -> str:
@@ -519,12 +520,20 @@ def diff_table(a: Table, b: Table) -> TableDiff:
     d = TableDiff("same", name, Where(a.name, a.file, a.line), Where(b.name, b.file, b.line))
     if _norm(a.caption) != _norm(b.caption):
         d.caption = (a.caption, b.caption)
-    d.rows_added = [k for _, k in rb if _norm(k) not in row_a]
-    d.rows_removed = [k for _, k in ra if _norm(k) not in row_b]
+    # rows whose name changed a little ("ALBERT | xlarge | 59M" -> "... | 60M"): paired by name, in order
+    left_a = [(i, k) for i, k in ra if _norm(k) not in row_b]
+    left_b = [(i, k) for i, k in rb if _norm(k) not in row_a]
+    renamed: dict[int, int] = {}
+    for x, y in _pair([k for _, k in left_a], [k for _, k in left_b], 0.6):
+        renamed[left_b[y][0]] = left_a[x][0]
+        d.rows_renamed.append((left_a[x][1], left_b[y][1]))
+    renamed_a = set(renamed.values())
+    d.rows_added = [k for i, k in left_b if i not in renamed]
+    d.rows_removed = [k for i, k in left_a if i not in renamed_a]
     d.columns_added = [k for k in cb if _norm(k) not in col_a]
     d.columns_removed = [k for k in ca if _norm(k) not in col_b]
     for i_b, rkey in rb:
-        i_a = row_a.get(_norm(rkey))
+        i_a = row_a.get(_norm(rkey), renamed.get(i_b))
         if i_a is None:
             continue
         first = min(a.row_start(i_a), b.row_start(i_b))
@@ -552,7 +561,7 @@ def diff_table(a: Table, b: Table) -> TableDiff:
                 way = direction(ckey) or direction(b.caption)  # "BLEU scores" over columns named EN-DE, EN-FR
                 better = (v_b > v_a) == (way == "higher") if way else None
             d.cells.append(CellChange(rkey, ckey, t_a, t_b, v_a, v_b, kind, bold_a, bold_b, line, better))
-    if d.cells or d.caption or d.rows_added or d.rows_removed or d.columns_added or d.columns_removed:
+    if d.cells or d.caption or d.rows_added or d.rows_removed or d.columns_added or d.columns_removed or d.rows_renamed:
         d.status = "changed"
     return d
 

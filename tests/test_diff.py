@@ -211,7 +211,8 @@ def test_a_table_whose_rows_were_all_renamed_is_still_paired(tmp_path: Path) -> 
         (tmp_path / name).mkdir()
         (tmp_path / name / "main.tex").write_text(table(label), encoding="utf-8")
     (t,) = compare(load(tmp_path / "a", "a"), load(tmp_path / "b", "b")).tables
-    assert t.status == "changed" and len(t.rows_added) == len(t.rows_removed) == 5
+    assert t.status == "changed" and not t.rows_added and not t.rows_removed and not t.cells
+    assert t.rows_renamed[0] == ("Completion | answer 1", "Target Completion | answer 1") and len(t.rows_renamed) == 5
 
 
 def test_numbers_that_are_not_changed_results() -> None:
@@ -246,3 +247,20 @@ def test_a_cell_written_with_the_papers_own_command(tmp_path: Path) -> None:
     assert [c.value for c in a.tables[0].rows[1]] == [None, 6.5]
     (t,) = compare(a, b).tables
     assert [(c.row, c.old, c.new) for c in t.cells] == [("Standard", "6.5_\\pm 0.4", "6.9_\\pm 0.4")]
+
+
+def test_a_row_whose_name_changed_a_little_is_still_compared(tmp_path: Path) -> None:
+    """From ALBERT v1 -> v6: the row "ALBERT | xlarge | 59M" became "... | 60M" and its results changed; and from LoRA
+    v1 -> v2: cells written ".32" (no leading zero) are numbers."""
+    from arxiv_diff.paper import load
+
+    def paper(folder: Path, params: str, squad: str, met: str) -> Path:
+        folder.mkdir()
+        rows = f"ALBERT & base & 12M & 89.3 & .45 \\\\\n & xlarge & {params} & {squad} & {met} \\\\\n"
+        text = "\\documentclass{article}\\begin{document}\n\\begin{tabular}{lllll}\nModel & Size & Params & SQuAD & MET \\\\\n\\midrule\n"
+        (folder / "main.tex").write_text(text + rows + "\\end{tabular}\n\\end{document}\n", encoding="utf-8")
+        return folder
+
+    (t,) = compare(load(paper(tmp_path / "a", "59M", "93.0", ".32"), "a"), load(paper(tmp_path / "b", "60M", "92.5", ".30"), "b")).tables
+    assert t.rows_renamed == [("ALBERT | xlarge | 59M", "ALBERT | xlarge | 60M")] and not t.rows_added
+    assert [(c.column, c.old, c.new, c.kind) for c in t.cells] == [("SQuAD", "93.0", "92.5", "value"), ("MET", ".32", ".30", "value")]

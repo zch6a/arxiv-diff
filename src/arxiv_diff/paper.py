@@ -75,6 +75,9 @@ def load(folder: Path, label: str = "") -> Paper:
             for cell in row:
                 if cell.value is None and cell.raw:
                     cell.text = latex.detex(cell.raw, src.macros)
+                    bare = re.fullmatch(r"([-−]?)\.(\d+)\s*%?", cell.text)  # .32: a number without its leading zero
+                    if bare:
+                        cell.value, cell.decimals = float(f"{bare.group(1).replace('−', '-')}0.{bare.group(2)}"), len(bare.group(2))
     paper.figures = latex.figures(src)
     paper.references = project.checked()
     paper.cited = list(project.cited)
