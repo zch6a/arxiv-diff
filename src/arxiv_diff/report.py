@@ -107,10 +107,12 @@ def _words(c: Change, color: bool) -> str:
         t = visible(t)
         if op == "=":
             out.append(t)
-        elif color:
-            out.append(f"{RED}\x1b[9m{t}{RESET}" if op == "-" else f"{GREEN}{t}{RESET}")
         else:
-            out.append(f"[-{t}-]" if op == "-" else f"{{+{t}+}}")
+            lead, core = t[: len(t) - len(t.lstrip())], t.lstrip()
+            if color:
+                out.append(lead + (f"{RED}\x1b[9m{core}{RESET}" if op == "-" else f"{GREEN}{core}{RESET}"))
+            else:
+                out.append(lead + (f"[-{core}-]" if op == "-" else f"{{+{core}+}}"))
     return "".join(out)
 
 

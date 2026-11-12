@@ -50,3 +50,20 @@ Tests: 29 (synthetic papers written by the tests; a fake arXiv), Python 3.10 and
 
 Next: the side-by-side HTML page; measurement on more multi-version papers (recall of number changes); Action,
 Skill, READMEs, CI, release.
+
+### 2026-11-13 — the side-by-side page
+
+- `--format html`: one self-contained file (no fonts, scripts or images from anywhere; a Content-Security-Policy
+  of `default-src 'none'`, no referrer), light and dark. Tables first (row, column, old, new, change, better/worse;
+  cleared cells grouped; the caption as a word diff), title and authors, the abstract side by side, then every
+  changed section folded with its counts (`+added −removed ~changed · unchanged`), the conclusion and short diffs
+  unfolded; each pair shows the old sentence with deletions struck on the left, the new one with insertions marked on
+  the right, and the file:line of each. Filters: only sentences whose numbers changed; hide moved sentences;
+  unfold all. `--all` puts every step on one page with links between them.
+- Every piece of the paper's text is escaped: a test writes `<script>` and `<img onerror>` into a paper's abstract
+  and title and checks that the page shows them as text, with its own script the only one.
+- Found by looking at the rendered page of *Attention Is All You Need* v1 → v7: the word diff lost the spaces
+  around inserted words ("encoder**and a**decoder"). Runs now keep the spaces before their words, kept text is
+  spaced as the new version spaces it, and the highlight starts after the space (terminal, Markdown and HTML).
+
+Tests: 33, Python 3.10 and 3.14; ruff, mypy clean.

@@ -38,29 +38,25 @@ def tokens(s: str) -> list[str]:
 
 
 def word_diff(a: str, b: str) -> list[tuple[str, str]]:
-    """The two texts as runs of ("=", kept), ("-", removed) and ("+", added) text.
+    """The two texts as runs of ("=", kept), ("-", removed) and ("+", added) text. Each run keeps the spaces before
+    its words, so the "=" and "+" runs joined are the new text, and kept text is as the new version spaces it.
 
     >>> word_diff("It reaches 28.4 BLEU.", "It now reaches 28.9 BLEU.")
-    [('=', 'It '), ('+', 'now'), ('=', ' reaches '), ('-', '28.4'), ('+', '28.9'), ('=', ' BLEU.')]
+    [('=', 'It'), ('+', ' now'), ('=', ' reaches'), ('-', ' 28.4'), ('+', ' 28.9'), ('=', ' BLEU.')]
+    >>> "".join(t for op, t in word_diff("an encoder-decoder configuration.", "an encoder and a decoder.") if op != "-")
+    'an encoder and a decoder.'
     """
     ta, tb = tokens(a), tokens(b)
     sm = SequenceMatcher(None, [t.strip() for t in ta], [t.strip() for t in tb], autojunk=False)
     out: list[tuple[str, str]] = []
     for op, i1, i2, j1, j2 in sm.get_opcodes():
         if op == "equal":
-            out.append(("=", "".join(ta[i1:i2])))
+            out.append(("=", "".join(tb[j1:j2])))
             continue
         if i2 > i1:
             out.append(("-", "".join(ta[i1:i2])))
         if j2 > j1:
             out.append(("+", "".join(tb[j1:j2])))
-    # a token carries the space before it: for display, the space before a change goes to the kept text before it
-    for k in range(1, len(out)):
-        kind, text = out[k]
-        if kind != "=" and text[:1].isspace():
-            if out[k - 1][0] == "=":
-                out[k - 1] = ("=", out[k - 1][1] + text[: len(text) - len(text.lstrip())])
-            out[k] = (kind, text.lstrip())
     return out
 
 
@@ -211,6 +207,12 @@ class SectionDiff:
     renamed: bool = False
     moved: bool = False  # it is now somewhere else in the paper's order
     appendix: bool = False
+    sentences: tuple[int, int] = (0, 0)  # how many the section has in each version
+
+    @property
+    def unchanged(self) -> int:
+        """Sentences the same in both versions."""
+        return max(0, self.sentences[1] - sum(c.kind in ("added", "changed") or (c.kind == "moved" and c.new is not None) for c in self.changes))
 
     @property
     def name(self) -> str:
@@ -288,14 +290,35 @@ def diff_sections(a: list[Section], b: list[Section]) -> list[SectionDiff]:
     out = []
     for old, new, moved in align_sections(a, b):
         if old is None and new is not None:
-            out.append(SectionDiff("added", None, _where(new), new.level, [Change("added", new=t) for t in new.sentences], appendix=new.appendix))
+            out.append(
+                SectionDiff(
+                    "added",
+                    None,
+                    _where(new),
+                    new.level,
+                    [Change("added", new=t) for t in new.sentences],
+                    appendix=new.appendix,
+                    sentences=(0, len(new.sentences)),
+                )
+            )
         elif new is None and old is not None:
-            out.append(SectionDiff("removed", _where(old), None, old.level, [Change("removed", old=t) for t in old.sentences], appendix=old.appendix))
+            out.append(
+                SectionDiff(
+                    "removed",
+                    _where(old),
+                    None,
+                    old.level,
+                    [Change("removed", old=t) for t in old.sentences],
+                    appendix=old.appendix,
+                    sentences=(len(old.sentences), 0),
+                )
+            )
         elif old is not None and new is not None:
             changes = diff_sentences(old.sentences, new.sentences)
             renamed = _title_key(old) != _title_key(new)
             status = "changed" if changes or renamed else "same"
-            out.append(SectionDiff(status, _where(old), _where(new), new.level, changes, renamed, moved, new.appendix))
+            sentences = (len(old.sentences), len(new.sentences))
+            out.append(SectionDiff(status, _where(old), _where(new), new.level, changes, renamed, moved, new.appendix, sentences))
     # a sentence removed in one place and added, word for word, in another has moved
     removed: dict[str, list[tuple[Change, SectionDiff]]] = {}
     for sd in out:

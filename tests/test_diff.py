@@ -46,7 +46,7 @@ def test_a_changed_number_in_a_sentence(tmp_path: Path) -> None:
     (c,) = results.changes
     assert c.kind == "changed" and c.numbers_only
     assert [(n.old, n.new) for n in c.numbers] == [("28.4", "28.9")]
-    assert ("-", "28.4") in c.words and ("+", "28.9") in c.words
+    assert ("-", " 28.4") in c.words and ("+", " 28.9") in c.words
     assert d.summary.text_numbers_changed == 1
 
 
@@ -62,7 +62,7 @@ def test_abstract_title_and_authors(tmp_path: Path) -> None:
     assert d.title == ("Attention Is All You Need", "Attention Is All You Need (Extended)")
     assert d.authors.added == ["Grace Hopper"] and not d.authors.removed and not d.authors.reordered
     assert [c.kind for c in d.abstract] == ["changed", "added"]
-    assert d.abstract[0].words[-2:] == [("+", "alone"), ("=", ".")]
+    assert d.abstract[0].words[-2:] == [("+", " alone"), ("=", ".")]
 
 
 def test_renamed_section_is_paired_with_its_old_self(tmp_path: Path) -> None:
@@ -103,7 +103,7 @@ def test_figures_and_references(tmp_path: Path) -> None:
     d = compare(version(tmp_path, "v1"), b)
     (f,) = d.figures
     assert f.status == "changed" and f.graphics == (["model"], ["model-v2"])
-    assert ("+", "Transformer") in f.caption
+    assert ("+", " Transformer") in f.caption
     assert [r.key for r in d.references.added] == ["luong2015"]
     (u,) = d.references.updated
     assert u.key == "bahdanau2014" and "now the published version" in u.what and "year 2014 → 2015" in u.what

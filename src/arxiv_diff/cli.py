@@ -19,7 +19,7 @@ from typing import Any
 
 from paper_proof.report import use_color
 
-from . import __version__, report
+from . import __version__, html, report
 from .arxiv import Client, FetchError, Record, parse_id
 from .diff import Diff, compare
 from .paper import NoSource, Paper, load
@@ -145,7 +145,7 @@ def main(argv: list[str] | None = None, client: Client | None = None) -> int:
     ap = argparse.ArgumentParser(prog="arxiv-diff", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("sources", nargs="+", metavar="SOURCE", help="an arXiv id (with or without a version), a folder or a .tex file; one or two")
     ap.add_argument("--all", action="store_true", help="compare every version with the next (an arXiv id without a version)")
-    ap.add_argument("--format", choices=["text", "markdown", "json"], default="text")
+    ap.add_argument("--format", choices=["text", "markdown", "json", "html"], default="text")
     ap.add_argument("-o", "--output", type=Path, help="write the report to this file instead of the terminal")
     ap.add_argument("--full", action="store_true", help="show every changed sentence (the terminal report shows a few per section)")
     ap.add_argument("--fail-on", choices=["never", "results", "any"], default="never", help="exit with 1 when results (numbers) or anything changed")
@@ -178,6 +178,8 @@ def main(argv: list[str] | None = None, client: Client | None = None) -> int:
     if args.format == "json":
         payload: Any = [to_json(d, info) for d, _, info in diffs]
         out = json.dumps(payload[0] if len(payload) == 1 else payload, indent=2, ensure_ascii=False) + "\n"
+    elif args.format == "html":
+        out = html.page([(d, line) for d, line, _ in diffs])
     elif args.format == "markdown":
         out = "\n".join(report.markdown(d, line, limit=10_000 if args.full else 30) for d, line, _ in diffs)
     else:
