@@ -1,0 +1,59 @@
+[project]
+name = "arxiv-diff"
+version = "0.1.0"
+description = "What changed between two versions of a paper: the result numbers in its tables, sections and sentences, the abstract, authors, references and figures. Any two arXiv versions, or two LaTeX folders."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [{ name = "zch6a" }]
+keywords = ["arxiv", "latex", "diff", "versions", "papers", "research", "reproducibility", "peer-review"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Text Processing :: Markup :: LaTeX",
+]
+# paper-proof reads each version's LaTeX project (\input, comments, \iffalse) and its tables, and fetches arXiv sources
+# safely.
+dependencies = [
+    "paper-proof @ git+https://github.com/zch6a/paper-proof@v0.1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/zch6a/arxiv-diff"
+Issues = "https://github.com/zch6a/arxiv-diff/issues"
+
+[project.scripts]
+arxiv-diff = "arxiv_diff.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/arxiv_diff"]
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.10"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "src"]
+pythonpath = ["src", "tests"]
+addopts = "--doctest-modules --import-mode=importlib"
+
+[tool.mypy]
+python_version = "3.10"
+files = ["src/arxiv_diff"]
+ignore_missing_imports = true
+
+[tool.ruff]
+line-length = 150
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]
