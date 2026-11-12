@@ -21,7 +21,7 @@ class Source:
     starts: list[int] = field(default_factory=list)  # where each piece starts in `text`
     origins: list[tuple[str, int]] = field(default_factory=list)  # (file, offset in that file) of each piece
     files: dict[str, str] = field(default_factory=dict)
-    macros: dict[str, str] = field(default_factory=dict)  # the document's own argument-less commands
+    macros: dict[str, tuple[int, str]] = field(default_factory=dict)  # the document's own commands: name -> (arguments, body)
 
     def where(self, pos: int) -> tuple[str, int]:
         r"""The file and line of a position in `text`.
@@ -158,42 +158,69 @@ def _accents(s: str) -> str:
 
 ENV_ARGS = {"minipage": 1, "multicols": 1, "wrapfigure": 2, "subfigure": 1, "adjustbox": 1, "spacing": 1, "tabular": 1}
 MACRO_DEF = re.compile(
-    r"\\(?:(?:re)?newcommand|providecommand)\*?\s*\{?\s*\\([A-Za-z@]+)\s*\}?\s*(?:\[0\])?\s*\{"
+    r"\\(?:(?:re)?newcommand|providecommand)\*?\s*\{?\s*\\([A-Za-z@]+)\s*\}?\s*(?:\[(\d)\])?\s*\{"
     r"|\\[gex]?def\s*\\([A-Za-z@]+)\s*\{"
     r"|\\DeclareMathOperator\*?\s*\{?\s*\\([A-Za-z@]+)\s*\}?\s*\{"
 )
 PROTECTED = KEEP_ARG | SECOND_ARG | DROP | REF | {"footnote", "thanks", "begin", "end", "section", "subsection", "item", "cite", "label"}
 
 
-def macros(text: str) -> dict[str, str]:
-    r"""The document's own commands that take no arguments (\newcommand{\method}{FooNet}, \def\dff{d_{ff}}), so that
-    the text reads as the paper prints it.
+def macros(text: str) -> dict[str, tuple[int, str]]:
+    r"""The document's own commands (\newcommand{\method}{FooNet}, \def\dff{d_{ff}}, \newcommand{\cell}[2]{#1$\pm$#2}),
+    as name -> (number of arguments, body), so that the text and the tables read as the paper prints them. Commands with
+    an optional argument, and \def with parameters, are left alone.
 
-    >>> macros(r"\newcommand{\ours}{\textsc{FooNet}\xspace} \def\dff{d_{\text{ff}}} \newcommand{\x}[1]{#1}")
-    {'ours': '\\textsc{FooNet}\\xspace', 'dff': 'd_{\\text{ff}}'}
+    >>> macros(r"\newcommand{\ours}{\textsc{FooNet}\xspace} \def\dff{d_{\text{ff}}} \newcommand{\cell}[2]{#1$_{\pm #2}$}")
+    {'ours': (0, '\\textsc{FooNet}\\xspace'), 'dff': (0, 'd_{\\text{ff}}'), 'cell': (2, '#1$_{\\pm #2}$')}
     """
-    out: dict[str, str] = {}
+    out: dict[str, tuple[int, str]] = {}
     for m in MACRO_DEF.finditer(text):
         end = _matching(text, m.end(), "{", "}")
-        name = m.group(1) or m.group(2) or m.group(3)
+        name = m.group(1) or m.group(3) or m.group(4)
         if end < 0 or name in PROTECTED or CITE_NAME.match(name):
             continue
-        body = text[m.end() : end]
-        if "#" in body or len(body) > 300:
+        n = int(m.group(2) or 0)
+        body = text[m.end() : end].replace("\n", " ")
+        if re.search(r"#(?![1-9])", body) or any(int(k) > n for k in re.findall(r"#([1-9])", body)) or len(body) > 300:
             continue
-        out[name] = "\\mathrm{" + body + "}" if m.group(3) else body
+        out[name] = (n, "\\mathrm{" + body + "}" if m.group(4) else body)
     return out
 
 
-def expand_macros(s: str, defs: dict[str, str] | None) -> str:
+COMMAND_NAME = re.compile(r"\\([A-Za-z@]+)(?![A-Za-z@])")
+
+
+def expand_macros(s: str, defs: dict[str, tuple[int, str]] | None) -> str:
+    r"""The document's own commands replaced by what they stand for, their arguments put in.
+
+    >>> expand_macros(r"\ours{} gets \cell{6.5}{0.4}.", {"ours": (0, "FooNet"), "cell": (2, "#1$_{\\pm #2}$")})
+    'FooNet{} gets 6.5$_{\\pm 0.4}$.'
+    """
     if not defs:
         return s
-    pattern = re.compile(r"\\([A-Za-z@]+)(?![A-Za-z@])")
-    for _ in range(4):  # macros that use macros; never forever
-        t = pattern.sub(lambda m: defs.get(m.group(1), m.group(0)), s)
-        if t == s:
+    for _ in range(4):  # commands that use commands; never forever
+        out, i, changed = [], 0, False
+        for m in COMMAND_NAME.finditer(s):
+            if m.start() < i or m.group(1) not in defs:
+                continue
+            n, body = defs[m.group(1)]
+            j, args = m.end(), []
+            for _k in range(n):
+                a = re.match(r"\s*\{", s[j:])
+                end = _matching(s, j + a.end(), "{", "}") if a else -1
+                if a is None or end < 0:
+                    break
+                args.append(s[j + a.end() : end])
+                j = end + 1
+            if len(args) < n:
+                continue
+            for k, arg in enumerate(args, 1):
+                body = body.replace(f"#{k}", arg)
+            out += [s[i : m.start()], body]
+            i, changed = j, True
+        if not changed:
             break
-        s = t
+        s = "".join(out) + s[i:]
     return s
 
 
@@ -269,7 +296,7 @@ def _text(s: str) -> str:
     return "".join(out)
 
 
-def detex(s: str, defs: dict[str, str] | None = None) -> str:
+def detex(s: str, defs: dict[str, tuple[int, str]] | None = None) -> str:
     r"""Prose as a reader sees it: the document's own macros expanded, formatting dropped, citations as [keys],
     references as (labels), math kept as written (so a changed formula shows), spaces normalised.
 
@@ -277,7 +304,7 @@ def detex(s: str, defs: dict[str, str] | None = None) -> str:
     'We train BERT [devlin, liu] (see Table (tab:main)); it reaches $F_1 = 91.2$%.'
     >>> detex(r"A \emph{new} {\bf idea}\footnote{Joint work, $n=2$.} --- here, ``quoted''.")
     'A new idea (footnote: Joint work, $n=2$.) — here, "quoted".'
-    >>> detex(r"\rule{0pt}{2ex}\multirow{4}{*}{(A)} \begin{center}\ours\end{center}", {"ours": r"\textsc{FooNet}"})
+    >>> detex(r"\rule{0pt}{2ex}\multirow{4}{*}{(A)} \begin{center}\ours\end{center}", {"ours": (0, r"\textsc{FooNet}")})
     '(A) FooNet'
     """
     t = _text(expand_macros(s, defs)).replace("---", "—").replace("--", "–").replace("``", '"').replace("''", '"')

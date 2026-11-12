@@ -68,8 +68,9 @@ def load(folder: Path, label: str = "") -> Paper:
         skip.append((m.start(), m.end()))
     paper.sections = latex.sections(src, skip)
     for file, text in project.texts.items():
-        paper.tables += find_tables(text, file)
+        paper.tables += find_tables(latex.expand_macros(text, src.macros), file)  # \cell{6.5}{0.4} is a number
     for table in paper.tables:  # names and headers as the paper prints them (its macros, \multirow, \rule)
+        table.caption = re.sub(r"\\label\S*\s*", "", table.caption).strip()
         for row in table.rows:
             for cell in row:
                 if cell.value is None and cell.raw:

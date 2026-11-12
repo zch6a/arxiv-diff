@@ -23,8 +23,24 @@ from .paper import Paper
 
 # ---------------------------------------------------------------- words and numbers
 
-TOKEN = re.compile(r"\s*(?:https?://[^\s)\]]+[^\s)\].,;:]|[-−]?\d+(?:[.,]\d+)*|\\[A-Za-z]+|[^\W\d_]+|\w+|[^\w\s])")
+# a URL; a citation's keys, whole ([huang2019evaluating] is not the year 2019); a number (a minus sign only where
+# a sign can be: not the hyphen of WikiText-103); a command; a word; a mark
+TOKEN = re.compile(
+    r"\s*(?:https?://[^\s)\]]+[^\s)\].,;:]|\[(?=[^\]]*[A-Za-z])[^\[\]]{1,300}\]|(?:(?<![\w)])[-−])?\d+(?:[.,]\d+)*"
+    r"|\\[A-Za-z]+|[^\W\d_]+|\w+|[^\w\s])"
+)
 NUMBER = re.compile(r"[-−]?\d+(?:[.,]\d+)*")
+SCALE = {"k": 1e3, "K": 1e3, "M": 1e6, "B": 1e9}
+
+
+def _value(toks: list[str], k: int) -> float:
+    """The number at toks[k], with a k/M/B written right after it (42k is 42,000)."""
+    v = float(toks[k].strip().replace("−", "-").replace(",", ""))
+    after = toks[k + 1 : k + 3]
+    if after and after[0] == "$":  # $4.6$k
+        after = after[1:]
+    nxt = after[0] if after else ""
+    return v * SCALE.get(nxt, 1.0) if nxt and not nxt[0].isspace() else v
 
 
 def tokens(s: str) -> list[str]:
@@ -74,6 +90,8 @@ def number_changes(a: str, b: str) -> list[NumberChange]:
     >>> old, new = "BLEU of 28.4 on EN-DE and 41.0 on EN-FR.", "BLEU of 28.9 on EN-DE and 41.0 on EN-FR."
     >>> [(n.old, n.new, n.before, n.after) for n in number_changes(old, new)]
     [('28.4', '28.9', 'BLEU of', 'on EN-DE')]
+    >>> number_changes("as high as 12288 [smith2019]", "as high as 12,288 [smith2020]"), number_changes("of 42k examples", "of 42,000 examples")
+    ([], [])
     """
     ta, tb = tokens(a), tokens(b)
     sa, sb = [t.strip() for t in ta], [t.strip() for t in tb]
@@ -81,12 +99,12 @@ def number_changes(a: str, b: str) -> list[NumberChange]:
     for op, i1, i2, j1, j2 in SequenceMatcher(None, sa, sb, autojunk=False).get_opcodes():
         if op != "replace":
             continue
-        na = [t for t in sa[i1:i2] if NUMBER.fullmatch(t)]
+        na = [(i1 + k, t) for k, t in enumerate(sa[i1:i2]) if NUMBER.fullmatch(t)]
         nb = [(j1 + k, t) for k, t in enumerate(sb[j1:j2]) if NUMBER.fullmatch(t)]
         if not na or len(na) != len(nb):
             continue
-        for x, (j, y) in zip(na, nb, strict=True):
-            if x != y:
+        for (i, x), (j, y) in zip(na, nb, strict=True):
+            if x != y and _value(sa, i) != _value(sb, j):  # 12288 and 12,288 are the same number
                 before = "".join(tb[max(0, j - 4) : j]).strip()
                 after = "".join(tb[j + 1 : j + 5]).strip()
                 out.append(NumberChange(x, y, before, after))

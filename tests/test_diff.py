@@ -212,3 +212,37 @@ def test_a_table_whose_rows_were_all_renamed_is_still_paired(tmp_path: Path) -> 
         (tmp_path / name / "main.tex").write_text(table(label), encoding="utf-8")
     (t,) = compare(load(tmp_path / "a", "a"), load(tmp_path / "b", "b")).tables
     assert t.status == "changed" and len(t.rows_added) == len(t.rows_removed) == 5
+
+
+def test_numbers_that_are_not_changed_results() -> None:
+    """From the measurement: a year inside a citation key (DDPM, ViT, GPT-3), the same number written another way
+    (LoRA: 12288 -> 12,288, 4.6k -> 4,600), and a hyphen that is not a minus sign (ALiBi: WikiText-103)."""
+    from arxiv_diff.diff import number_changes
+
+    assert number_changes("importance sampling [huang2019evaluating].", "importance sampling [huang2020evaluating].") == []
+    assert number_changes("as high as 12288, making", "as high as 12,288, making") == []
+    assert number_changes("$4.6$k validation examples", "$4,600$ validation examples") == []
+    assert number_changes("on WikiText-103 ALiBi is efficient", "on WikiText 103 ALiBi is efficient") == []
+    (n,) = number_changes("from 14.8% to 17.3%", "from 14.3% to 17.3%")
+    assert (n.old, n.new) == ("14.8", "14.3")
+
+
+def test_a_cell_written_with_the_papers_own_command(tmp_path: Path) -> None:
+    """From Chain-of-Thought v6: cells written \\cell{6.5}{0.4} (a command with arguments) are numbers."""
+    from arxiv_diff.paper import load
+
+    def paper(folder: Path, value: str) -> Path:
+        folder.mkdir()
+        body = (
+            "\\begin{tabular}{lc}\nMethod & GSM8K \\\\\n\\midrule\nStandard & \\cell{"
+            + value
+            + "}{0.4} \\\\\nCoT & \\cell{14.3}{0.4} \\\\\n\\end{tabular}"
+        )
+        text = "\\documentclass{article}\n\\newcommand{\\cell}[2]{#1$_{\\pm #2}$}\n\\begin{document}\n" + body + "\n\\end{document}\n"
+        (folder / "main.tex").write_text(text, encoding="utf-8")
+        return folder
+
+    a, b = load(paper(tmp_path / "a", "6.5"), "a"), load(paper(tmp_path / "b", "6.9"), "b")
+    assert [c.value for c in a.tables[0].rows[1]] == [None, 6.5]
+    (t,) = compare(a, b).tables
+    assert [(c.row, c.old, c.new) for c in t.cells] == [("Standard", "6.5_\\pm 0.4", "6.9_\\pm 0.4")]
