@@ -106,4 +106,53 @@ def test_figures_and_references(tmp_path: Path) -> None:
     assert ("+", "Transformer") in f.caption
     assert [r.key for r in d.references.added] == ["luong2015"]
     (u,) = d.references.updated
-    assert u.key == "bahdanau2014" and "now the published version" in u.what and "year 2014 -> 2015" in u.what
+    assert u.key == "bahdanau2014" and "now the published version" in u.what and "year 2014 → 2015" in u.what
+
+
+VARIATIONS = r"""\documentclass{article}
+\newcommand{\dff}{d_{\text{ff}}}
+\begin{document}
+\section{Results}
+See Table~\ref{tab:var}.
+\begin{table}\caption{Variations.}\label{tab:var}
+\begin{tabular}{lccc}
+\hline
+ & $\dff$ & PPL & params \\
+\hline
+base & %DFF% & 4.92 & 65 \\
+\hline\rule{0pt}{2.0ex}
+\multirow{2}{*}{(A)}
+& 512 & 5.29 & %P% \\
+& 128 & 5.00 & %P% \\
+\hline
+\end{tabular}
+\end{table}
+\end{document}
+"""
+
+
+def _variations(folder: Path, dff: str, params: str) -> Path:
+    folder.mkdir(parents=True)
+    (folder / "main.tex").write_text(VARIATIONS.replace("%DFF%", dff).replace("%P%", params), encoding="utf-8")
+    return folder
+
+
+def test_table_keys_read_as_printed(tmp_path: Path) -> None:
+    """From Attention Is All You Need, v1 -> v7: a header that is a macro, names under \\multirow and \\rule,
+    a corrected value, and cells cleared."""
+    from arxiv_diff.diff import columns, rows
+    from arxiv_diff.paper import load
+
+    a = load(_variations(tmp_path / "v1", "1024", "65"), "v1")
+    b = load(_variations(tmp_path / "v7", "2048", ""), "v7")
+    assert columns(a.tables[0])[1] == r"$d_{\text{ff}}$"
+    assert [k for _, k in rows(a.tables[0])] == ["base", "(A)", "(A) (2)"]
+    (t,) = compare(a, b).tables
+    value = [c for c in t.cells if c.kind == "value"]
+    assert [(c.row, c.old, c.new) for c in value] == [("base", "1024", "2048")]
+    assert [(c.row, c.old, c.new) for c in t.cells if c.kind == "text"] == [("(A)", "65", ""), ("(A) (2)", "65", "")]
+    from arxiv_diff.report import text
+
+    out = text(compare(a, b))
+    assert "base · $d_{\\text{ff}}$: 1024 → 2048  (+1024)" in out
+    assert "params: 2 cells emptied (was 65): (A); (A) (2)" in out

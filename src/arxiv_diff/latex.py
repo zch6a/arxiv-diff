@@ -21,6 +21,7 @@ class Source:
     starts: list[int] = field(default_factory=list)  # where each piece starts in `text`
     origins: list[tuple[str, int]] = field(default_factory=list)  # (file, offset in that file) of each piece
     files: dict[str, str] = field(default_factory=dict)
+    macros: dict[str, str] = field(default_factory=dict)  # the document's own argument-less commands
 
     def where(self, pos: int) -> tuple[str, int]:
         r"""The file and line of a position in `text`.
@@ -67,6 +68,7 @@ def expand(project: Project) -> Source:
         out.append(text)
         n += len(text)
     src.text = "".join(out)
+    src.macros = macros(src.text)
     return src
 
 
@@ -154,13 +156,60 @@ def _accents(s: str) -> str:
     return ACCENT.sub(letter, s)
 
 
+ENV_ARGS = {"minipage": 1, "multicols": 1, "wrapfigure": 2, "subfigure": 1, "adjustbox": 1, "spacing": 1, "tabular": 1}
+MACRO_DEF = re.compile(
+    r"\\(?:(?:re)?newcommand|providecommand)\*?\s*\{?\s*\\([A-Za-z@]+)\s*\}?\s*(?:\[0\])?\s*\{"
+    r"|\\[gex]?def\s*\\([A-Za-z@]+)\s*\{"
+    r"|\\DeclareMathOperator\*?\s*\{?\s*\\([A-Za-z@]+)\s*\}?\s*\{"
+)
+PROTECTED = KEEP_ARG | SECOND_ARG | DROP | REF | {"footnote", "thanks", "begin", "end", "section", "subsection", "item", "cite", "label"}
+
+
+def macros(text: str) -> dict[str, str]:
+    r"""The document's own commands that take no arguments (\newcommand{\method}{FooNet}, \def\dff{d_{ff}}), so that
+    the text reads as the paper prints it.
+
+    >>> macros(r"\newcommand{\ours}{\textsc{FooNet}\xspace} \def\dff{d_{\text{ff}}} \newcommand{\x}[1]{#1}")
+    {'ours': '\\textsc{FooNet}\\xspace', 'dff': 'd_{\\text{ff}}'}
+    """
+    out: dict[str, str] = {}
+    for m in MACRO_DEF.finditer(text):
+        end = _matching(text, m.end(), "{", "}")
+        name = m.group(1) or m.group(2) or m.group(3)
+        if end < 0 or name in PROTECTED or CITE_NAME.match(name):
+            continue
+        body = text[m.end() : end]
+        if "#" in body or len(body) > 300:
+            continue
+        out[name] = "\\mathrm{" + body + "}" if m.group(3) else body
+    return out
+
+
+def expand_macros(s: str, defs: dict[str, str] | None) -> str:
+    if not defs:
+        return s
+    pattern = re.compile(r"\\([A-Za-z@]+)(?![A-Za-z@])")
+    for _ in range(4):  # macros that use macros; never forever
+        t = pattern.sub(lambda m: defs.get(m.group(1), m.group(0)), s)
+        if t == s:
+            break
+        s = t
+    return s
+
+
 def _text(s: str) -> str:
-    """LaTeX outside math as text."""
+    """LaTeX as text (inline math kept as written)."""
     s = _accents(s)
     out: list[str] = []
     i = 0
     while i < len(s):
         c = s[i]
+        if c == "$" or s.startswith("\\(", i):
+            m = INLINE_MATH.match(s, i)
+            if m is not None:
+                out.append(re.sub(r"\s+", " ", m.group(0)))
+                i = m.end()
+                continue
         if c == "\\":
             m = COMMAND.match(s, i)
             if m is None:
@@ -186,14 +235,25 @@ def _text(s: str) -> str:
                 _, j = _arg(s, j)
                 arg, j = _arg(s, j)
                 out.append(_text(arg or ""))
+            elif name in ("multirow", "multicolumn"):  # {rows}{width}{text}, {columns}{spec}{text}: the text
+                _, j = _arg(s, j)
+                _, j = _arg(s, j)
+                arg, j = _arg(s, j)
+                out.append(_text(arg or ""))
+            elif name in ("begin", "end"):
+                env, j = _arg(s, j)
+                for _ in range(ENV_ARGS.get((env or "").rstrip("*"), 0) if name == "begin" else 0):
+                    _, j = _arg(s, j)
+                out.append(" ")
             elif name in WORDS:
                 out.append(WORDS[name])
-                if j < len(s) and s[j] == "{" and s[j : j + 2] == "{}":
+                if s.startswith("{}", j):
                     j += 2
-            elif name in DROP and name not in NO_ARGS:
+            elif name in ("rule", "setlength", "addtolength", "setcounter", "addtocounter"):
                 _, j = _arg(s, j)
-                if name in ("setlength", "addtolength", "setcounter", "addtocounter", "color"):
-                    _, j = _arg(s, j)
+                _, j = _arg(s, j)
+            elif name in DROP and name not in NO_ARGS or name in ("cellcolor", "rowcolor", "columncolor"):
+                _, j = _arg(s, j)
             # any other command: dropped, its arguments kept as text (braces fall away below)
             i = j
             continue
@@ -205,22 +265,18 @@ def _text(s: str) -> str:
     return "".join(out)
 
 
-def detex(s: str) -> str:
-    r"""Prose as a reader sees it: formatting dropped, citations as [keys], references as (labels), math kept as
-    written (so a changed formula shows), spaces normalised.
+def detex(s: str, defs: dict[str, str] | None = None) -> str:
+    r"""Prose as a reader sees it: the document's own macros expanded, formatting dropped, citations as [keys],
+    references as (labels), math kept as written (so a changed formula shows), spaces normalised.
 
     >>> detex(r"We train \textbf{BERT}~\cite{devlin, liu} (see Table~\ref{tab:main}); it reaches $F_1 = 91.2$\%.")
     'We train BERT [devlin, liu] (see Table (tab:main)); it reaches $F_1 = 91.2$%.'
-    >>> detex(r"A \emph{new} {\bf idea}\footnote{Joint work.} --- here, ``quoted''.")
-    'A new idea (footnote: Joint work.) — here, "quoted".'
+    >>> detex(r"A \emph{new} {\bf idea}\footnote{Joint work, $n=2$.} --- here, ``quoted''.")
+    'A new idea (footnote: Joint work, $n=2$.) — here, "quoted".'
+    >>> detex(r"\rule{0pt}{2ex}\multirow{4}{*}{(A)} \begin{center}\ours\end{center}", {"ours": r"\textsc{FooNet}"})
+    '(A) FooNet'
     """
-    parts, last = [], 0
-    for m in INLINE_MATH.finditer(s):
-        parts.append(_text(s[last : m.start()]))
-        parts.append(re.sub(r"\s+", " ", m.group(0)))
-        last = m.end()
-    parts.append(_text(s[last:]))
-    t = "".join(parts).replace("---", "—").replace("--", "–").replace("``", '"').replace("''", '"')
+    t = _text(expand_macros(s, defs)).replace("---", "—").replace("--", "–").replace("``", '"').replace("''", '"')
     t = re.sub(r"\s+", " ", t).strip()
     return re.sub(r"\s+([,.;:!?)])", r"\1", re.sub(r"\(\s+", "(", t))
 
@@ -276,13 +332,13 @@ def sentences(src: Source, start: int, end: int) -> list[Sentence]:
         if kind == "equation":
             body = re.sub(r"\\label\{[^}]*\}|\\nonumber|\\notag", "", text)
             body = re.sub(r"^\\begin\{[^}]*\}|\\end\{[^}]*\}$|^\\\[|\\\]$|^\$\$|\$\$$", "", body.strip())
-            body = re.sub(r"\s+", " ", body).strip()
+            body = re.sub(r"\s+", " ", expand_macros(body, src.macros)).strip()
             if body:
                 out.append(Sentence(body, *src.where(start + off), kind="equation"))
             continue
         for p_off, para in _paragraphs(text):
             for s_off, sent in _split_sentences(para):
-                plain = detex(sent)
+                plain = detex(sent, src.macros)
                 if len(re.findall(r"\w", plain)) >= 2:
                     pos = start + off + p_off + s_off + (len(sent) - len(sent.lstrip()))
                     out.append(Sentence(plain, *src.where(pos)))
@@ -363,7 +419,7 @@ def sections(src: Source, front_skip: list[tuple[int, int]] | None = None) -> li
         close = _matching(text, m.end(), "{", "}")
         if close < 0:
             continue
-        heads.append((m.start(), close + 1, LEVEL[m.group(1)], bool(m.group(2)), detex(text[m.end() : close])))
+        heads.append((m.start(), close + 1, LEVEL[m.group(1)], bool(m.group(2)), detex(text[m.end() : close], src.macros)))
     out: list[Section] = []
     first = heads[0][0] if heads else end
     out.append(Section(0, "", "", start, start, first, *src.where(start)))
@@ -403,7 +459,7 @@ def title(src: Source) -> str:
     if not m:
         return ""
     end = _matching(src.text, m.end(), "{", "}")
-    return detex(src.text[m.end() : end]) if end > 0 else ""
+    return detex(src.text[m.end() : end], src.macros) if end > 0 else ""
 
 
 def abstract(src: Source) -> tuple[int, int]:
@@ -448,7 +504,7 @@ def authors(src: Source) -> list[str]:
         block = re.sub(r"\$[^$]*\$|\\textsuperscript\{[^}]*\}|\^\{?[^}\s]*\}?", " ", block)
         for chunk in re.split(r"\\(?:and|And|AND)\b|\\quad|\\qquad|\\hspace\*?\{[^}]*\}|\\\\\s*\\\\|&", block):
             first = re.split(r"\\\\|\\newline|\n\s*\n", chunk.strip())[0]
-            for part in re.split(r",|;|\band\b|\s&\s", detex(first)):
+            for part in re.split(r",|;|\band\b|\s&\s", detex(first, src.macros)):
                 name = re.sub(r"[*†‡§¶∗⋆♠♣♢♡\d]+", "", part).strip(" .")
                 words = name.split()
                 looks_like_one = 1 <= len(words) <= 6 and any(w[:1].isupper() for w in words) and re.search(r"[^\W\d_]", name)
@@ -494,7 +550,7 @@ def figures(src: Source) -> list[Figure]:
         if caps:  # the figure's own caption is the last one (subfigures' come first)
             c = caps[-1]
             end = _matching(body, c.end(), "{", "}")
-            caption = detex(body[c.end() : end]) if end > 0 else ""
+            caption = detex(body[c.end() : end], src.macros) if end > 0 else ""
         labels = re.findall(r"\\label\{([^}]+)\}", body)
         graphics = [_graphic_name(next(g for g in gm.groups() if g)) for gm in GRAPHICS.finditer(body)]
         out.append(Figure(labels[-1] if labels else "", caption, graphics, *src.where(m.start())))

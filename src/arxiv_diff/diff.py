@@ -3,7 +3,7 @@ r"""What changed between two versions of a paper.
 Sections are paired by title, then by their text (a renamed or moved section is still the same section); within a
 pair, sentences are paired the same way and each changed sentence gets a word-level diff, with the numbers that
 changed in it picked out. Tables are paired by \label, caption or shape, and their cells by row name and column
-header, so a result that changed is reported as "Transformer (big), EN-DE: 28.4 -> 28.9", wherever the row moved.
+header, so a result that changed is reported as "Transformer (big), EN-DE: 28.4 → 28.9", wherever the row moved.
 Figures, authors and cited references are compared on their own.
 """
 
@@ -23,7 +23,7 @@ from .paper import Paper
 
 # ---------------------------------------------------------------- words and numbers
 
-TOKEN = re.compile(r"\s*(?:[-−]?\d+(?:[.,]\d+)*|\\[A-Za-z]+|[^\W\d_]+|\w+|[^\w\s])")
+TOKEN = re.compile(r"\s*(?:https?://[^\s)\]]+[^\s)\].,;:]|[-−]?\d+(?:[.,]\d+)*|\\[A-Za-z]+|[^\W\d_]+|\w+|[^\w\s])")
 NUMBER = re.compile(r"[-−]?\d+(?:[.,]\d+)*")
 
 
@@ -393,8 +393,8 @@ def rows(t: Table) -> list[tuple[int, str]]:
             continue
         start = t.row_start(i)
         names = [c.text for c in r[:start]]
-        if start < len(r) and any(names) and len(above) >= len(names):
-            names = [n or above[k] for k, n in enumerate(names)]  # filled down
+        if start < len(r):  # a row of results: name cells left empty are filled down (\multirow)
+            names = [n or (above[k] if k < len(above) else "") for k, n in enumerate(names)]
         if any(names):
             above = names
         out.append((i, " | ".join(n for n in names if n) or f"row {i + 1}"))
@@ -632,13 +632,13 @@ def diff_references(a: list[Reference], b: list[Reference]) -> RefDiff:
     for old, new in pairs:
         what = []
         if _title(old) and _title(new) and _title(old) != _title(new):
-            what.append(f'title "{old.title}" -> "{new.title}"')
+            what.append(f'title "{old.title}" → "{new.title}"')
         if _is_preprint(old) and not _is_preprint(new) and (new.venue or new.doi):
             what.append(f"now the published version ({new.venue or new.doi})")
         elif old.venue and new.venue and " ".join(_words(old.venue)) != " ".join(_words(new.venue)):
-            what.append(f'venue "{old.venue}" -> "{new.venue}"')
+            what.append(f'venue "{old.venue}" → "{new.venue}"')
         if old.year and new.year and old.year != new.year:
-            what.append(f"year {old.year} -> {new.year}")
+            what.append(f"year {old.year} → {new.year}")
         if what:
             d.updated.append(RefChange(new.key, new.title, "; ".join(what)))
     return d

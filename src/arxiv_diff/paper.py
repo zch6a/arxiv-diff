@@ -69,6 +69,11 @@ def load(folder: Path, label: str = "") -> Paper:
     paper.sections = latex.sections(src, skip)
     for file, text in project.texts.items():
         paper.tables += find_tables(text, file)
+    for table in paper.tables:  # names and headers as the paper prints them (its macros, \multirow, \rule)
+        for row in table.rows:
+            for cell in row:
+                if cell.value is None and cell.raw:
+                    cell.text = latex.detex(cell.raw, src.macros)
     paper.figures = latex.figures(src)
     paper.references = project.checked()
     paper.cited = list(project.cited)
