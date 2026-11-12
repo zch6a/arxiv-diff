@@ -307,7 +307,9 @@ def detex(s: str, defs: dict[str, tuple[int, str]] | None = None) -> str:
     >>> detex(r"\rule{0pt}{2ex}\multirow{4}{*}{(A)} \begin{center}\ours\end{center}", {"ours": (0, r"\textsc{FooNet}")})
     '(A) FooNet'
     """
-    t = _text(expand_macros(s, defs)).replace("---", "—").replace("--", "–").replace("``", '"').replace("''", '"')
+    s = expand_macros(s, defs)
+    s = re.sub(r"\\[hv]skip\s*-?[\d.]+\s*\w+(?:\s+plus\s+-?[\d.]+\s*\w+)?(?:\s+minus\s+-?[\d.]+\s*\w+)?", " ", s)  # glue
+    t = _text(s).replace("---", "—").replace("--", "–").replace("``", '"').replace("''", '"')
     t = re.sub(r"\s+", " ", t).strip()
     return re.sub(r"\s+([,.;:!?)])", r"\1", re.sub(r"\(\s+", "(", t))
 

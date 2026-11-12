@@ -12,6 +12,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 
@@ -137,7 +138,7 @@ def similarity(a: str, b: str) -> float:
     return sm.ratio() if len(wa) * len(wb) < 250_000 else sm.quick_ratio()
 
 
-def _pair(a: list[str], b: list[str], threshold: float) -> list[tuple[int, int]]:
+def _pair(a: list[str], b: list[str], threshold: float, bonus: Callable[[int, int], float] | None = None) -> list[tuple[int, int]]:
     """Pairs (i, j) of similar texts, in order on both sides, with the largest total similarity."""
     n, m = len(a), len(b)
     if not n or not m:
@@ -151,6 +152,8 @@ def _pair(a: list[str], b: list[str], threshold: float) -> list[tuple[int, int]]
                 j0 = top[1] + 1
         return out
     sim = [[similarity(x, y) for y in b] for x in a]
+    if bonus is not None:  # among texts alike enough, prefer the pair the bonus favours
+        sim = [[v + bonus(i, j) if v >= threshold else v for j, v in enumerate(row)] for i, row in enumerate(sim)]
     best = [[0.0] * (m + 1) for _ in range(n + 1)]
     for i in range(n - 1, -1, -1):
         for j in range(m - 1, -1, -1):
@@ -521,16 +524,6 @@ def diff_table(a: Table, b: Table) -> TableDiff:
     d = TableDiff("same", name, Where(a.name, a.file, a.line), Where(b.name, b.file, b.line))
     if _norm(a.caption) != _norm(b.caption):
         d.caption = (a.caption, b.caption)
-    # rows whose name changed a little ("ALBERT | xlarge | 59M" -> "... | 60M"): paired by name, in order
-    left_a = [(i, k) for i, k in ra if _norm(k) not in row_b]
-    left_b = [(i, k) for i, k in rb if _norm(k) not in row_a]
-    renamed: dict[int, int] = {}
-    for x, y in _pair([k for _, k in left_a], [k for _, k in left_b], 0.6):
-        renamed[left_b[y][0]] = left_a[x][0]
-        d.rows_renamed.append((left_a[x][1], left_b[y][1]))
-    renamed_a = set(renamed.values())
-    d.rows_added = [k for i, k in left_b if i not in renamed]
-    d.rows_removed = [k for i, k in left_a if i not in renamed_a]
     # columns whose header changed a little ("WikiSQL Accuracy (%)" -> "WikiSQL Acc. (%)"): paired by header, in order
     left_ca = [(j, k) for j, k in enumerate(ca) if _norm(k) not in col_b]
     left_cb = [(j, k) for j, k in enumerate(cb) if _norm(k) not in col_a]
@@ -540,6 +533,25 @@ def diff_table(a: Table, b: Table) -> TableDiff:
     renamed_cols = {o for o, _ in d.columns_renamed} | {n for _, n in d.columns_renamed}
     d.columns_added = [k for k in cb if _norm(k) not in col_a and k not in renamed_cols]
     d.columns_removed = [k for k in ca if _norm(k) not in col_b and k not in renamed_cols]
+    # rows whose name changed a little ("ALBERT | xlarge | 59M" -> "... | 60M"): paired by name, in order; between
+    # rows named alike, the one whose numbers are the old row's ("Adapter | 11.48M" is "Adapter^L | 11.09M", not
+    # "Adapter^L | 0.37M")
+    left_a = [(i, k) for i, k in ra if _norm(k) not in row_b]
+    left_b = [(i, k) for i, k in rb if _norm(k) not in row_a]
+    shared = [(col_a[_norm(k)], j) for j, k in enumerate(cb) if _norm(k) in col_a]
+
+    def same_numbers(x: int, y: int) -> float:
+        ra_, rb_ = a.rows[left_a[x][0]], b.rows[left_b[y][0]]
+        cells = [(ra_[ja], rb_[jb]) for ja, jb in shared if ja < len(ra_) and jb < len(rb_) and ra_[ja].value is not None]
+        return sum(p.value == q.value for p, q in cells) / len(cells) if cells else 0.0
+
+    renamed: dict[int, int] = {}
+    for x, y in _pair([k for _, k in left_a], [k for _, k in left_b], 0.6, same_numbers):
+        renamed[left_b[y][0]] = left_a[x][0]
+        d.rows_renamed.append((left_a[x][1], left_b[y][1]))
+    renamed_a = set(renamed.values())
+    d.rows_added = [k for i, k in left_b if i not in renamed]
+    d.rows_removed = [k for i, k in left_a if i not in renamed_a]
     for i_b, rkey in rb:
         i_a = row_a.get(_norm(rkey), renamed.get(i_b))
         if i_a is None:

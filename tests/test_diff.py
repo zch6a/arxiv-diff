@@ -284,3 +284,25 @@ Allen Institute for Artificial Intelligence, Seattle, WA, USA\\
         "\\documentclass{article}\n" + author + "\n\\begin{document}\n\\maketitle\nText here.\n\\end{document}\n", encoding="utf-8"
     )
     assert load(tmp_path / "p", "p").authors == ["Iz Beltagy", "Matthew E. Peters", "Kaiming He", "Julien Mairal", "Yuanzhi Li"]
+
+
+def test_between_rows_named_alike_the_one_with_the_same_numbers(tmp_path: Path) -> None:
+    """From LoRA v1 -> v2: "GPT-2 M (Adapter) | 11.48M" became one of two "Adapter^L" rows: the one whose results
+    are the same, not the first. And TeX glue in a heading command (\\hskip 0.9em plus 0.3em) is not text."""
+    from arxiv_diff.latex import detex
+    from arxiv_diff.paper import load
+
+    def paper(folder: Path, rows: str) -> Path:
+        folder.mkdir()
+        head = "\\documentclass{article}\\begin{document}\n\\begin{tabular}{lllll}\nMethod & Params & BLEU & MET & CIDEr \\\\\n\\midrule\n"
+        (folder / "main.tex").write_text(head + rows + "\\end{tabular}\n\\end{document}\n", encoding="utf-8")
+        return folder
+
+    a = load(paper(tmp_path / "a", "GPT-2 M (Adapter) & 11.48M & 68.9 & 46.1 & 2.47 \\\\\n"), "a")
+    b = load(
+        paper(tmp_path / "b", "GPT-2 M (AdapterL) & 0.37M & 66.3 & 45.0 & 2.40 \\\\\nGPT-2 M (AdapterL) & 11.09M & 68.9 & 46.1 & 2.47 \\\\\n"), "b"
+    )
+    (t,) = compare(a, b).tables
+    assert t.rows_renamed == [("GPT-2 M (Adapter) | 11.48M", "GPT-2 M (AdapterL) | 11.09M")] and not t.cells
+    assert t.rows_added == ["GPT-2 M (AdapterL) | 0.37M"]
+    assert detex(r"Adapters.\hskip 0.9em plus 0.3em minus 0.3em They are slow.") == "Adapters. They are slow."

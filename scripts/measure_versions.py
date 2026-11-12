@@ -93,6 +93,8 @@ def main() -> int:
         print(f"  words {s.words_old} -> {s.words_new}, changed {s.changed_share:.0%}; sentences {sentences}")
         tables = f"values changed {s.table_values_changed}, added {s.tables_added}, removed {s.tables_removed}"
         print(f"  tables {len(a.tables)} -> {len(b.tables)}: {tables}; text numbers {s.text_numbers_changed}")
+        if d.authors.changed:
+            print(f"  AUTHORS added {d.authors.added} removed {d.authors.removed} reordered {d.authors.reordered}")
         totals["papers"] += 1
         totals["values"] += s.table_values_changed
         totals["text_numbers"] += s.text_numbers_changed
