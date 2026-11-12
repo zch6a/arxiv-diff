@@ -86,6 +86,9 @@ arxiv-diff paper-v1/ paper-v2/            # two LaTeX folders (or two main .tex 
 | `--fail-on results` / `any` | exit with 1 when a number changed / anything changed |
 | `--keep DIR` | keep the arXiv sources it fetched (otherwise deleted) |
 
+It exits with 0 when the comparison is done, 1 when `--fail-on` says so, and 2 when it could not compare (a version
+arXiv does not have, a PDF-only version, a folder without a LaTeX document).
+
 ## What it compares
 
 | | |

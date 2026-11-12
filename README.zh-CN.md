@@ -73,6 +73,8 @@ arxiv-diff paper-v1/ paper-v2/            # 两个 LaTeX 文件夹（或两个�
 | `--fail-on results` / `any` | 数字变了 / 任何内容变了时退出码为 1 |
 | `--keep DIR` | 保留从 arXiv 取来的源码（默认用完即删） |
 
+退出码：比较完成为 0；`--fail-on` 条件满足为 1；无法比较为 2（arXiv 上没有该版本、某版本只有 PDF、文件夹里没有 LaTeX 文档）。
+
 ## 比较什么
 
 | | |

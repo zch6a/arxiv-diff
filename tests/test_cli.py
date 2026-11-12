@@ -115,8 +115,33 @@ def test_pdf_only_version_is_an_error(tmp_path: Path, capsys: pytest.CaptureFixt
     assert "submitted as a PDF only" in capsys.readouterr().err
 
 
-def test_not_a_source(tmp_path: Path) -> None:
-    with pytest.raises(SystemExit, match="neither a folder"):
-        main(["no-such-thing"])
+def _usage_error(args: list[str], capsys: pytest.CaptureFixture[str], client: Client | None = None) -> str:
+    with pytest.raises(SystemExit) as e:
+        main(args, client=client)
+    assert e.value.code == 2
+    return capsys.readouterr().err
+
+
+def test_not_a_source(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    assert "neither a folder" in _usage_error(["no-such-thing"], capsys)
     (tmp_path / "empty").mkdir()
     assert main([str(tmp_path / "empty"), str(tmp_path / "empty")]) == 2
+
+
+def test_what_cannot_be_compared(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    fake = FakeArxiv(tmp_path)
+    a, b = write(tmp_path / "a"), write(tmp_path / "b")
+    assert "give two folders" in _usage_error([str(a)], capsys)
+    assert "--all compares every version of one arXiv paper" in _usage_error([str(a), str(b), "--all"], capsys)
+    assert "versions start at v1" in _usage_error(["2501.00001v0"], capsys)
+    assert "v1 is the first version" in _usage_error(["2501.00001v1"], capsys, fake.client())
+    # a version arXiv does not have: said before anything is downloaded
+    assert main(["2501.00001v9"], client=fake.client()) == 2
+    assert "arXiv has v1 to v3 of 2501.00001: there is no v9" in capsys.readouterr().err
+    assert not any("e-print" in u for u in fake.urls)
+
+
+def test_report_into_a_new_folder(tmp_path: Path) -> None:
+    out = tmp_path / "reports" / "2026" / "diff.md"
+    assert main([str(write(tmp_path / "a")), str(write(tmp_path / "b", BIG="28.9")), "--format", "markdown", "-o", str(out)]) == 0
+    assert "28.9" in out.read_text(encoding="utf-8")

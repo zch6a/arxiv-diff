@@ -40,13 +40,19 @@ class Side:
         return f"v{self.version}"
 
 
+class UsageError(ValueError):
+    """What was asked cannot be done as asked (exit status 2, like argparse's own errors)."""
+
+
 def _side(arg: str) -> Side:
     p = Path(arg)
     if p.exists():
         return Side(folder=p)
     aid, v = parse_id(arg)
     if not aid:
-        raise SystemExit(f"arxiv-diff: {arg!r} is neither a folder, a .tex file nor an arXiv id")
+        raise UsageError(f"{arg!r} is neither a folder, a .tex file nor an arXiv id")
+    if v == 0:
+        raise UsageError(f"{arg!r}: arXiv's versions start at v1")
     return Side(arxiv_id=aid, version=v)
 
 
@@ -64,16 +70,20 @@ def _pairs(sides: list[Side], every: bool, client: Client, records: dict[str, Re
             raise FetchError(f"arXiv lists no versions of {aid}")
         return versions[-1].number
 
+    if every and (len(sides) != 1 or not sides[0].arxiv_id):
+        raise UsageError("--all compares every version of one arXiv paper: give its id alone")
+    if len(sides) == 1 and sides[0].folder is not None:
+        raise UsageError("give two folders to compare (or an arXiv id)")
     for s in sides:  # the record names the versions and their dates, for the report
         if s.arxiv_id:
-            record(s.arxiv_id)
+            n = latest(s.arxiv_id)
+            if s.version is not None and s.version > n:
+                raise FetchError(f"arXiv has v1 to v{n} of {s.arxiv_id}: there is no v{s.version}")
     if len(sides) == 1:
         s = sides[0]
-        if s.folder is not None:
-            raise SystemExit("arxiv-diff: give two folders to compare (or an arXiv id)")
         if s.version is not None and not every:
             if s.version < 2:
-                raise SystemExit(f"arxiv-diff: {s.arxiv_id}v1 is the first version; give two versions to compare")
+                raise UsageError(f"{s.arxiv_id}v1 is the first version; give two versions to compare")
             return [(Side(arxiv_id=s.arxiv_id, version=s.version - 1), s)]
         n = latest(s.arxiv_id)
         if n < 2:
@@ -160,8 +170,11 @@ def main(argv: list[str] | None = None, client: Client | None = None) -> int:
     records: dict[str, Record] = {}
     diffs: list[tuple[Diff, str, dict[str, Any]]] = []
     try:
-        sides = [_side(s) for s in args.sources]
-        pairs = _pairs(sides, args.all, client, records)
+        try:
+            sides = [_side(s) for s in args.sources]
+            pairs = _pairs(sides, args.all, client, records)
+        except UsageError as e:
+            ap.error(str(e))
         if not pairs:
             print(f"arxiv-diff: {sides[0].arxiv_id} has only one version on arXiv: nothing to compare")
             return 0
@@ -186,6 +199,7 @@ def main(argv: list[str] | None = None, client: Client | None = None) -> int:
         color = args.output is None and use_color(sys.stdout, args.color)
         out = "\n".join(report.text(d, color, 0 if args.full else 6, line) for d, line, _ in diffs)
     if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(out, encoding="utf-8")
     else:
         sys.stdout.write(out)
