@@ -19,7 +19,10 @@ the test). To measure on real papers:
 uv run python scripts/measure_versions.py ids.txt /tmp/arxiv-diff-sources --max 20
 ```
 
-It fetches v1 and the latest version of each paper (one request every 3 seconds) into a folder outside this
+A change to the Markdown report is checked as GitHub renders it, with hostile text in a synthetic paper
+(`uv run python scripts/check_github_render.py /tmp/render`, needs `gh`).
+
+The measurement script fetches v1 and the latest version of each paper (one request every 3 seconds) into a folder outside this
 repository, compares them, and audits the tables independently of the report. Delete the folder afterwards; never
 commit papers' sources.
 
