@@ -378,15 +378,30 @@ class TableDiff:
 
 
 def _norm(s: str) -> str:
-    return " ".join(re.findall(r"[\w.%+-]+", s.lower()))
+    """A row or column name compared without case, spaces or LaTeX's braces and dollars (marks such as * and † are
+    kept: "Swin-L (HTC++)" and "Swin-L (HTC++)*" are different rows)."""
+    return re.sub(r"[\s{}$\\~]+", " ", s.lower()).strip()
+
+
+CELL_NUMBER = re.compile(r"(?<![\d.])[-−]?(?:\d+(?:,\d{3})*(?:\.\d+)?|\.\d+)")
+
+
+def cell_numbers(s: str) -> list[float]:
+    r"""Every number a cell shows, in order: "89.3/82.1" is two results, and "47.1(±.2)" a result and its spread.
+
+    >>> cell_numbers("89.3/82.1"), cell_numbers(r"72.0 (79.6/70.1)"), cell_numbers(r"47.1\textsubscript\pm.2")
+    ([89.3, 82.1], [72.0, 79.6, 70.1], [47.1, 0.2])
+    """
+    return [float(n.replace("−", "-").replace(",", "")) for n in CELL_NUMBER.findall(s)]
 
 
 def _dedupe(keys: list[str]) -> list[str]:
     seen: Counter[str] = Counter()
     out = []
     for k in keys:
-        seen[k] += 1
-        out.append(k if seen[k] == 1 else f"{k} ({seen[k]})")
+        seen[_norm(k)] += 1  # names that only differ in spacing or case are the same name
+        n = seen[_norm(k)]
+        out.append(k if n == 1 else f"{k} ({n})")
     return out
 
 
@@ -448,6 +463,7 @@ def match_tables(a: list[Table], b: list[Table]) -> list[tuple[int, int]]:
     for score_of, threshold in (
         (lambda t, u: similarity(t.caption, u.caption) if t.caption and u.caption else 0.0, 0.6),
         (lambda t, u: len(_signature(t) & _signature(u)) / max(1, len(_signature(t) | _signature(u))), 0.5),
+        (_same_shape, 0.25),  # every row renamed ("Completion" -> "Target Completion"): the same columns, as many rows, same file
     ):
         scored = sorted(
             ((score_of(t, u), i, j) for i, t in enumerate(a) if i not in used_a for j, u in enumerate(b) if j not in used_b),
@@ -457,6 +473,13 @@ def match_tables(a: list[Table], b: list[Table]) -> list[tuple[int, int]]:
             if score >= threshold and i not in used_a and j not in used_b:
                 take(i, j)
     return sorted(pairs, key=lambda p: p[1])
+
+
+def _same_shape(t: Table, u: Table) -> float:
+    if t.file != u.file or len(t.rows) != len(u.rows):
+        return 0.0
+    ct, cu = {_norm(k) for k in columns(t)}, {_norm(k) for k in columns(u)}
+    return 0.5 * len(ct & cu) / max(1, len(ct | cu))
 
 
 def _cell_text(t: Table, i: int, j: int) -> tuple[str, float | None, bool, int]:
@@ -495,6 +518,13 @@ def diff_table(a: Table, b: Table) -> TableDiff:
             t_b, v_b, bold_b, line = _cell_text(b, i_b, j_b)
             if v_a is not None and v_b is not None:
                 kind = "value" if v_a != v_b else "bold" if bold_a != bold_b else ""
+                na, nb = cell_numbers(t_a), cell_numbers(t_b)
+                if kind != "value" and na != nb:  # another number in the cell changed: "89.3/82.1" -> "89.3/82.3"
+                    k = next((k for k, (x, y) in enumerate(zip(na, nb, strict=False)) if x != y), None)
+                    if k is not None:
+                        kind, v_a, v_b = "value", na[k], nb[k]
+                    else:  # a number added or dropped beside the result: a spread, a delta
+                        kind = "text"
             else:
                 kind = "text" if _norm(t_a) != _norm(t_b) else ""
             if not kind:

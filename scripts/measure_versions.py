@@ -21,7 +21,7 @@ from pathlib import Path
 from paper_proof.tables import Table
 
 from arxiv_diff.arxiv import Client, FetchError
-from arxiv_diff.diff import TableDiff, compare, match_tables, rows
+from arxiv_diff.diff import TableDiff, cell_numbers, compare, match_tables, rows
 from arxiv_diff.paper import NoSource, load
 
 
@@ -32,8 +32,8 @@ def numbers(t: Table, skip_rows: set[str] = frozenset(), skip_cols: set[int] = f
         if keys.get(i) in skip_rows:
             continue
         for j, c in enumerate(t.rows[i]):
-            if c.value is not None and j not in skip_cols:
-                out[c.text] += 1
+            if c.value is not None and j not in skip_cols:  # a cell as the numbers it shows (not its formatting)
+                out[" ".join(f"{n:g}" for n in cell_numbers(c.text))] += 1
     return out
 
 
@@ -46,8 +46,8 @@ def audit(ta: Table, tb: Table, td: TableDiff) -> tuple[Counter[str], Counter[st
     old = numbers(ta, set(td.rows_removed), gone_cols)
     new = numbers(tb, set(td.rows_added), new_cols)
     left, arrived = old - new, new - old
-    left -= Counter(c.old for c in td.cells if c.old)
-    arrived -= Counter(c.new for c in td.cells if c.new)
+    left -= Counter(" ".join(f"{n:g}" for n in cell_numbers(c.old)) for c in td.cells if c.old)
+    arrived -= Counter(" ".join(f"{n:g}" for n in cell_numbers(c.new)) for c in td.cells if c.new)
     return left, arrived
 
 

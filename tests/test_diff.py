@@ -156,3 +156,59 @@ def test_table_keys_read_as_printed(tmp_path: Path) -> None:
     out = text(compare(a, b))
     assert "base · $d_{\\text{ff}}$: 1024 → 2048  (+1024)" in out
     assert "params: 2 cells emptied (was 65): (A); (A) (2)" in out
+
+
+COCO = r"""\documentclass{article}
+\begin{document}
+\section{Results}
+\begin{table}\caption{System-level comparison.}\label{exp:coco}
+\setlength\tabcolsep{1.0pt}
+\begin{tabular}{lcc}
+\toprule
+Method & SQuAD & RACE \\
+\midrule
+Swin-L (HTC++) & 57.1 & %RACE% \\
+Swin-L (HTC++)* & 58.0 & 64.0 \\
+ALBERT & %SQUAD% & 68.4 \\
+\bottomrule
+\end{tabular}
+\end{table}
+\end{document}
+"""
+
+
+def _coco(folder: Path, squad: str, race: str) -> Path:
+    folder.mkdir(parents=True)
+    (folder / "main.tex").write_text(COCO.replace("%SQUAD%", squad).replace("%RACE%", race), encoding="utf-8")
+    return folder
+
+
+def test_marked_rows_and_cells_with_several_numbers(tmp_path: Path) -> None:
+    """From Swin Transformer v1 -> v2 (a row and its starred twin, unchanged, were compared with each other) and
+    ALBERT v1 -> v6 (the second number of "89.3/82.1" changed and nothing was reported)."""
+    from arxiv_diff.diff import columns
+    from arxiv_diff.paper import load
+
+    a = load(_coco(tmp_path / "a", "89.3/82.1", "63.5"), "a")
+    b = load(_coco(tmp_path / "b", "89.3/82.3", "63.5"), "b")
+    assert columns(a.tables[0])[0] == "Method"  # \setlength\tabcolsep{1.0pt} is not part of the header
+    (t,) = compare(a, b).tables
+    assert [(c.row, c.old, c.new, c.kind, c.delta) for c in t.cells] == [("ALBERT", "89.3/82.1", "89.3/82.3", "value", 0.2)]
+    same = load(_coco(tmp_path / "c", "89.3/82.1", "63.5"), "c")
+    assert not compare(a, same).tables[0].cells
+
+
+def test_a_table_whose_rows_were_all_renamed_is_still_paired(tmp_path: Path) -> None:
+    """From GPT-3 v1 -> v4: every row's label went from "Completion" to "Target Completion"."""
+    from arxiv_diff.paper import load
+
+    def table(label: str) -> str:
+        rows = "\n".join(f"{label} & answer {k} & {k}.0 \\\\" for k in range(1, 6))
+        head = "\\documentclass{article}\\begin{document}\n\\begin{tabular}{lll}\nContext & Q & score \\\\\n\\midrule\n"
+        return f"{head}{rows}\n\\end{{tabular}}\n\\end{{document}}\n"
+
+    for name, label in (("a", "Completion"), ("b", "Target Completion")):
+        (tmp_path / name).mkdir()
+        (tmp_path / name / "main.tex").write_text(table(label), encoding="utf-8")
+    (t,) = compare(load(tmp_path / "a", "a"), load(tmp_path / "b", "b")).tables
+    assert t.status == "changed" and len(t.rows_added) == len(t.rows_removed) == 5

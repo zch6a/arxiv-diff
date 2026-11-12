@@ -250,7 +250,11 @@ def _text(s: str) -> str:
                 if s.startswith("{}", j):
                     j += 2
             elif name in ("rule", "setlength", "addtolength", "setcounter", "addtocounter"):
-                _, j = _arg(s, j)
+                lhs = re.match(r"\s*\\[A-Za-z@]+", s[j:])  # \setlength\tabcolsep{1pt}: a length without braces
+                if lhs and name != "rule":
+                    j += lhs.end()
+                else:
+                    _, j = _arg(s, j)
                 _, j = _arg(s, j)
             elif name in DROP and name not in NO_ARGS or name in ("cellcolor", "rowcolor", "columncolor"):
                 _, j = _arg(s, j)
