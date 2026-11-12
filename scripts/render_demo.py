@@ -17,11 +17,23 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 CHROME = sys.argv[1] if len(sys.argv) > 1 else r"C:\Program Files\Google\Chrome\Application\chrome.exe"
-COLORS = {"1": "#e6edf3;font-weight:700", "31": "#ff7b72", "9": "#ff7b72;text-decoration:line-through", "33": "#e3b341", "32": "#7ee787", "2": "#8b949e"}
+COLORS = {
+    "1": "#e6edf3;font-weight:700",
+    "31": "#ff7b72",
+    "9": "#ff7b72;text-decoration:line-through",
+    "33": "#e3b341",
+    "32": "#7ee787",
+    "2": "#8b949e",
+}
 
 env = dict(os.environ, PYTHONIOENCODING="utf-8")
 out = subprocess.run(
-    ["uv", "run", "arxiv-diff", "examples/v1", "examples/v2", "--color", "always"], cwd=ROOT, env=env, capture_output=True, text=True, encoding="utf-8"
+    ["uv", "run", "arxiv-diff", "examples/v1", "examples/v2", "--color", "always"],
+    cwd=ROOT,
+    env=env,
+    capture_output=True,
+    text=True,
+    encoding="utf-8",
 ).stdout
 out = out.rstrip()
 
