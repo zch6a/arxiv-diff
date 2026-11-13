@@ -32,7 +32,9 @@ commit papers' sources.
 |---|---|
 | `latex.py` | the document in reading order, LaTeX as text, sentences, sections, title, authors, figures |
 | `paper.py` | one version of a paper |
-| `diff.py` | the comparison: sections, sentences, tables, figures, authors, references |
+| `diff.py` | the comparison of two papers: sections, sentences, figures, authors, references, the summary |
+| `words.py` | tokens, word diffs, the numbers that changed in a sentence, similarity, pairing in order |
+| `tables.py` | the comparison of tables: pairing, rows and columns (renamed too), cells, better/worse |
 | `arxiv.py` | versions and sources from arXiv |
 | `report.py`, `html.py` | the terminal and Markdown reports; the side-by-side page |
 | `cli.py` | the command line (and the JSON report) |

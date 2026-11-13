@@ -162,6 +162,16 @@ def _words(s: str) -> list[str]:
     return re.findall(r"\d+(?:\.\d+)*|\w+", s.lower())
 
 
+def _ratio(sm: SequenceMatcher[str], la: int, lb: int, floor: float = 0.3) -> float:
+    """SequenceMatcher's ratio, the cheap upper bounds first (below `floor` the exact value does not matter);
+    quick and approximate for long texts."""
+    if not la and not lb:
+        return 1.0
+    if sm.real_quick_ratio() < floor or sm.quick_ratio() < floor:
+        return sm.quick_ratio()
+    return sm.ratio() if la * lb < 250_000 else sm.quick_ratio()
+
+
 def similarity(a: str, b: str) -> float:
     """How much of two texts is the same, by words in order (0 to 1); quick and approximate for long texts.
 
@@ -169,28 +179,40 @@ def similarity(a: str, b: str) -> float:
     0.73
     """
     wa, wb = _words(a), _words(b)
-    if not wa and not wb:
-        return 1.0
-    sm = SequenceMatcher(None, wa, wb, autojunk=False)
-    if sm.real_quick_ratio() < 0.3 or sm.quick_ratio() < 0.3:
-        return sm.quick_ratio()
-    return sm.ratio() if len(wa) * len(wb) < 250_000 else sm.quick_ratio()
+    return _ratio(SequenceMatcher(None, wa, wb, autojunk=False), len(wa), len(wb))
+
+
+def _similarities(wa: list[list[str]], wb: list[list[str]], band: int, floor: float = 0.3) -> list[list[float]]:
+    """How alike each old text is to each new one within `band` places of where it would fall in order (0 outside):
+    each text tokenized once, each new text's index built once (SequenceMatcher keeps it while the old one varies)."""
+    n, m = len(wa), len(wb)
+    sim = [[0.0] * m for _ in range(n)]
+    for j in range(m):
+        sm: SequenceMatcher[str] = SequenceMatcher(None, autojunk=False)
+        sm.set_seq2(wb[j])
+        centre = round(j * n / m)
+        for i in range(max(0, centre - band), min(n, centre + band + 1)):
+            sm.set_seq1(wa[i])
+            sim[i][j] = _ratio(sm, len(wa[i]), len(wb[j]), floor)
+    return sim
 
 
 def _pair(a: list[str], b: list[str], threshold: float, bonus: Callable[[int, int], float] | None = None) -> list[tuple[int, int]]:
-    """Pairs (i, j) of similar texts, in order on both sides, with the largest total similarity."""
+    """Pairs (i, j) of similar texts, in order on both sides, with the largest total similarity. A text is compared
+    with those near its own place in the other list (a rewritten passage keeps its order), so a long run of changed
+    sentences costs a band, not a square.
+
+    >>> _pair(["the cat sat", "a dog ran far", "new words here"], ["a dog ran very far", "the cat sat down"], 0.5)
+    [(1, 0)]
+    """
     n, m = len(a), len(b)
     if not n or not m:
         return []
-    if n * m > 4000:  # a long run of changed text: pair greedily
-        out, j0 = [], 0
-        for i, x in enumerate(a):
-            top = max(((similarity(x, b[j]), j) for j in range(j0, min(m, j0 + 30))), default=(0.0, -1))
-            if top[0] >= threshold:
-                out.append((i, top[1]))
-                j0 = top[1] + 1
-        return out
-    sim = [[similarity(x, y) for y in b] for x in a]
+    wa, wb = [_words(x) for x in a], [_words(y) for y in b]
+    band = n + m if n * m <= 400 else 12 + abs(n - m)
+    if n * m > 40_000:  # a very long run of changed text: a narrow band
+        band = 30
+    sim = _similarities(wa, wb, band, max(0.3, threshold))  # below the threshold a pair is not taken anyway
     if bonus is not None:  # among texts alike enough, prefer the pair the bonus favours
         sim = [[v + bonus(i, j) if v >= threshold else v for j, v in enumerate(row)] for i, row in enumerate(sim)]
     best = [[0.0] * (m + 1) for _ in range(n + 1)]

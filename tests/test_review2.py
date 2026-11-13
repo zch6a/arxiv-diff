@@ -140,3 +140,27 @@ def test_numbers_now_under_another_header_are_pointed_out(tmp_path: Path) -> Non
     (t,) = compare(load(a), load(b)).tables
     assert t.columns_moved == [("val", "test-dev"), ("test-dev", "test-std")]
     assert "numbers now under another header: val → test-dev; test-dev → test-std" in text(compare(load(a), load(b)))
+
+
+def test_a_fully_rewritten_section_is_compared_quickly(tmp_path: Path) -> None:
+    """Round 4: every sentence of long sections rewritten cost a square of comparisons per section (43 s for 100
+    sections of 60 sentences); now a band near each sentence's place, each sentence tokenized once."""
+    import random
+    import time
+
+    vocab = "model data attention layer training results improves baseline accuracy method task network".split()
+
+    def section(edit: bool) -> str:
+        out = []
+        for k in range(60):
+            words = " ".join(random.Random(k).choice(vocab) for _ in range(16))
+            out.append(f"{words.capitalize()} {'now ' if edit else ''}reaches {k}.{k + int(edit)} points.")
+        return "\\section{A}\n" + "\n".join(out) + "\n"
+
+    a = project(tmp_path / "a", {"main.tex": doc(section(False) * 5)})
+    b = project(tmp_path / "b", {"main.tex": doc(section(True) * 5)})
+    pa, pb = load(a), load(b)
+    start = time.perf_counter()
+    d = compare(pa, pb)
+    assert time.perf_counter() - start < 5
+    assert d.summary.sentences_changed == 300 and d.summary.sentences_added == d.summary.sentences_removed == 0
