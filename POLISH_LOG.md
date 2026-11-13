@@ -288,3 +288,7 @@ paper-proof, is a git reference).
 - 2 places: a 3-item 顿号 list used as the subject of a sentence turned into clauses (who needs to know which numbers changed), and a semicolon between two independent sentences split into a full stop (how LaTeX is read).
 - The checks follow the findings of lieflat-less-ai-tone (shiujan, CC BY-NC 4.0); its findings applied, its text not copied.
 - Left as they are: the feature enumeration in the opening (it must be complete), the field and paper lists in parentheses, the semicolon list of problems found by measuring, colon-led lists, tables.
+### 2026-11-14 — a link to research-kit
+
+Both READMEs now end (before the licence) with a short section pointing to research-kit, the toolkit's front door: all
+thirteen tools in the order of the work, and one Claude Code plugin marketplace for their skills. Documentation only.

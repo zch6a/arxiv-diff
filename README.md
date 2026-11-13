@@ -172,6 +172,12 @@ wrapped over two lines.
 [paper-proof](https://github.com/zch6a/paper-proof) checks a paper's references and its numbers against its own
 tables; [submit-check](https://github.com/zch6a/submit-check) checks it against a venue's submission rules.
 
+## Part of research-kit
+
+One of thirteen open research tools, from reading papers to after publication. All of them, in the order of
+the work, with one Claude Code plugin marketplace for their skills: [research-kit](https://github.com/zch6a/research-kit)
+· [site](https://zch6a.github.io/research-kit/).
+
 ## License
 
 MIT
