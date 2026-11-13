@@ -222,3 +222,27 @@ Next: five polishing rounds, then v0.1.0.
 6. **Engineering**: CI green.
 7. **Security and privacy**: the arXiv queries carry a generic User-Agent; the sources were kept in the scratchpad
    only while measuring.
+
+## Polishing round 4 (2026-11-13)
+
+1. **Function**: nothing new promised; every earlier test still holds after the restructuring (90 tests).
+2. **Code**:
+   - `diff.py` had grown to 991 lines holding three jobs. Split by moving whole top-level definitions (by their
+     syntax-tree spans, no code retyped): `words.py` (tokens, word diffs, numbers in sentences, similarity, pairing;
+     213 lines), `tables.py` (the table comparison; 343 lines), `diff.py` (the paper level; 467 lines), which
+     re-exports the public names so nothing that imports from it changed.
+   - Types: section, table and figure statuses, sentence and cell kinds are `Literal` types (mypy now rejects a
+     misspelled one; it found two places that passed a plain string); the last two `type: ignore` removed (an
+     `object` parameter, an unchecked regex match).
+3. **Tests**: 88 → 90, among them a speed test for a fully rewritten section.
+4. **Experience: speed.** A synthetic worst case (100 sections of 60 sentences, every sentence rewritten, 1,500
+   changed cells) took 43.5 s to compare: in a fully rewritten section every old sentence was compared with every
+   new one (3,600 comparisons a section), each re-tokenizing both sentences and rebuilding the matcher's index.
+   Now each sentence is tokenized once, each new sentence indexed once, a sentence is compared with those near its
+   own place (a rewrite keeps its order; the band widens with the difference in length), and pairs whose cheap upper
+   bound is below the pairing threshold are skipped (exact: they would not be taken). 12 s for that case; the HTML
+   page for it (3.7 MB) is made in 0.3 s. A real paper of 81,600 words compares in under 3 s.
+5. **Docs**: CONTRIBUTING's map of the modules.
+6. **Engineering**: CI green. A commit went in with a lint warning in a test (fixed in the next commit); commits
+   are now made only when ruff passes.
+7. **Security and privacy**: no new inputs or outputs this round.
