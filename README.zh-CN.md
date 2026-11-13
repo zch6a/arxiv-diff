@@ -26,7 +26,7 @@ $ arxiv-diff 1706.03762
 arxiv-diff: v1 → v7  1706.03762 "Attention Is All You Need" (2017-06-12 → 2023-08-02)
   prose 3,711 → 3,831 words, 4% of the old text rewritten or removed
   sentences +9 -8 ~17 changed
-  2 results changed in tables, 1 number changed in the text, 1 figure changed, 4 references added
+  2 results changed in tables, 1 number changed in the text, 2 table rows added, 1 figure changed, 4 references added
 
 Tables
   changed  tab:wmt-results  results.tex:8
