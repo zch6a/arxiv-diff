@@ -172,14 +172,22 @@ def main(argv: list[str] | None = None, client: Client | None = None) -> int:
 def _main(argv: list[str] | None, client: Client | None) -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    ap = argparse.ArgumentParser(prog="arxiv-diff", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    epilog = "exit status: 0 compared, 1 when --fail-on says so, 2 when it could not compare"
+    ap = argparse.ArgumentParser(prog="arxiv-diff", description=__doc__, epilog=epilog, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("sources", nargs="+", metavar="SOURCE", help="an arXiv id (with or without a version), a folder or a .tex file; one or two")
     ap.add_argument("--all", action="store_true", help="compare every version with the next (an arXiv id without a version)")
-    ap.add_argument("--format", choices=["text", "markdown", "json", "html"], default="text")
+    ap.add_argument(
+        "--format",
+        choices=["text", "markdown", "json", "html"],
+        default="text",
+        help="text for the terminal (default), markdown for a pull request, json for everything, html for a side-by-side page",
+    )
     ap.add_argument("-o", "--output", type=Path, help="write the report to this file instead of the terminal")
     ap.add_argument("--full", action="store_true", help="show every changed sentence (the terminal report shows a few per section)")
     ap.add_argument("--fail-on", choices=["never", "results", "any"], default="never", help="exit with 1 when results (numbers) or anything changed")
-    ap.add_argument("--color", choices=["auto", "always", "never"], default="auto")
+    ap.add_argument(
+        "--color", choices=["auto", "always", "never"], default="auto", help="colours in the terminal report (auto: when it is a terminal)"
+    )
     ap.add_argument("--keep", type=Path, metavar="DIR", help="keep the arXiv sources fetched in DIR (otherwise they are deleted)")
     ap.add_argument("--version", action="version", version=f"arxiv-diff {__version__}")
     args = ap.parse_args(argv)

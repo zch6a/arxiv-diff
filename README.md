@@ -143,6 +143,12 @@ LoRA, Longformer, GPT-3, DDPM, Latent Diffusion, Chain-of-Thought, FlashAttentio
 | **Numbers changed in the text** | 30, each read in its sentence: all real edits (BERT's abstract, ALBERT's gains, Swin's 86.4 → 87.3 and 60 → 90 epochs, ...) |
 | **Authors** | right in all 40 versions; the 3 changes reported (RoFormer, LoRA, Chain-of-Thought gained authors) are real |
 
+Then on 35 more: the other 16 of those papers with several versions (BLIP-2, LLaVA, Flan, DPO, MT-Bench, …; 200 table
+pairs audited, 0 unexplained) and 19 outside machine learning (theoretical physics, PDEs, condensed matter, astronomy,
+neuroscience, quantum physics, combinatorics, econometrics, fluid dynamics, statistics; 69 table pairs, 0
+unexplained). Outside machine learning most numbers that change are in formulas: those are shown in the sentences'
+word diffs but not listed as changed numbers, which brought the list from 47 to 16 entries, all real edits.
+
 Measuring found what tests had not, and each case is now a test: a row and its starred twin read as one row
 (Swin), a change in the second number of a cell like `89.3/82.1` missed (ALBERT), rows and columns whose names
 changed a little left unpaired (ALBERT's `59M` → `60M`, LoRA's `Accuracy` → `Acc.`), and, between two rows named
