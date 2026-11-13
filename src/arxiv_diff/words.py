@@ -7,6 +7,7 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from difflib import SequenceMatcher
+from typing import Literal
 
 # a URL; a DOI; a citation's keys, whole ([huang2019evaluating] is not the year 2019); a reference ‹label›; a number (a minus sign only where
 # a sign can be: not the hyphen of WikiText-103); a command; a word; a mark
@@ -21,6 +22,9 @@ NUMBER = re.compile(r"[-−]?\d+(?:[.,]\d+)*")
 
 
 SCALE = {"k": 1e3, "K": 1e3, "M": 1e6, "B": 1e9}
+
+
+Status = Literal["same", "changed", "added", "removed"]  # of a section, a table, a figure
 
 
 def _value(toks: list[str], k: int) -> float:

@@ -8,6 +8,7 @@ import re
 from paper_proof.report import _code, _md, visible
 
 from .diff import CellChange, Change, Diff, SectionDiff, word_diff
+from .latex import Sentence
 
 CONCLUSION = re.compile(r"conclu|summary|discussion|limitation|future work|outlook", re.I)
 RED, GREEN, YELLOW, DIM, BOLD, RESET = "\x1b[31m", "\x1b[32m", "\x1b[33m", "\x1b[2m", "\x1b[1m", "\x1b[0m"
@@ -130,9 +131,9 @@ def _words(c: Change, color: bool) -> str:
     return "".join(out)
 
 
-def _at(s: object) -> str:
+def _at(s: Sentence) -> str:
     """file:line, with any control characters in the file name made visible."""
-    return visible(f"{s.file}:{s.line}")  # type: ignore[attr-defined]
+    return visible(f"{s.file}:{s.line}")
 
 
 def _change_line(c: Change, color: bool) -> str:
@@ -308,7 +309,8 @@ def _md_words(c: Change) -> str:
             out.append(_md(t))
             prev = op
             continue
-        lead, core, trail = re.match(r"(\s*)(.*?)(\s*)$", t, re.S).groups()  # type: ignore[union-attr]
+        lead, core = t[: len(t) - len(t.lstrip())], t.strip()
+        trail = t[len(t.rstrip()) :] if core else ""
         if op == "+" and prev == "-" and lead:
             lead = " "
         prev = op

@@ -7,10 +7,11 @@ from __future__ import annotations
 import re
 from collections import Counter
 from dataclasses import dataclass, field
+from typing import Literal
 
 from paper_proof.tables import HIGHER, LOWER, Table, direction
 
-from .words import Where, _pair, similarity
+from .words import Status, Where, _pair, similarity
 
 
 @dataclass
@@ -21,7 +22,7 @@ class CellChange:
     new: str
     old_value: float | None
     new_value: float | None
-    kind: str  # "value" (a number changed), "text" (a cell changed otherwise), "bold" (only the bold marking)
+    kind: Literal["value", "text", "bold"]  # a number changed; the cell changed otherwise; only the bold marking
     old_bold: bool = False
     new_bold: bool = False
     line: int = 0  # in the new version
@@ -45,7 +46,7 @@ class CellChange:
 
 @dataclass
 class TableDiff:
-    status: str  # "same", "changed", "added", "removed"
+    status: Status
     name: str  # \label, else the caption's beginning
     old: Where | None
     new: Where | None
@@ -274,6 +275,7 @@ def diff_table(a: Table, b: Table) -> TableDiff:
                 continue
             t_a, v_a, bold_a, _ = _cell_text(a, i_a, j_a)
             t_b, v_b, bold_b, line = _cell_text(b, i_b, j_b)
+            kind: Literal["value", "text", "bold", ""]
             if v_a is not None and v_b is not None:
                 kind = "value" if v_a != v_b else "bold" if bold_a != bold_b else ""
                 na, nb = cell_numbers(t_a), cell_numbers(t_b)

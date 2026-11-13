@@ -13,13 +13,14 @@ import re
 import unicodedata
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
+from typing import Literal
 
 from paper_proof.check import Reference
 
 from .latex import Figure, Section, Sentence
 from .paper import Paper
 from .tables import CellChange, TableDiff, caption_direction, cell_numbers, columns, diff_table, diff_tables, match_tables, rows
-from .words import NumberChange, Where, _numbers_only, _pair, _words, number_changes, opcodes, similarity, tokens, word_diff
+from .words import NumberChange, Status, Where, _numbers_only, _pair, _words, number_changes, opcodes, similarity, tokens, word_diff
 
 # what the reports, the scripts and the tests use from here (the comparison's parts live in words.py and tables.py)
 __all__ = [
@@ -35,7 +36,7 @@ __all__ = [
 
 @dataclass
 class Change:
-    kind: str  # "added", "removed", "changed", or "moved" (the same sentence, now in another section)
+    kind: Literal["added", "removed", "changed", "moved"]  # moved: the same sentence, now in another section
     old: Sentence | None = None
     new: Sentence | None = None
     words: list[tuple[str, str]] = field(default_factory=list)
@@ -73,7 +74,7 @@ def diff_sentences(a: list[Sentence], b: list[Sentence]) -> list[Change]:
 
 @dataclass
 class SectionDiff:
-    status: str  # "same", "changed", "added", "removed"
+    status: Status
     old: Where | None
     new: Where | None
     level: int
@@ -190,7 +191,7 @@ def diff_sections(a: list[Section], b: list[Section]) -> list[SectionDiff]:
         elif old is not None and new is not None:
             changes = diff_sentences(old.sentences, new.sentences)
             renamed = _title_key(old) != _title_key(new)
-            status = "changed" if changes or renamed else "same"
+            status: Status = "changed" if changes or renamed else "same"
             sentences = (len(old.sentences), len(new.sentences))
             out.append(SectionDiff(status, _where(old), _where(new), new.level, changes, renamed, moved, new.appendix, sentences))
     # a sentence removed in one place and added, word for word, in another has moved
@@ -218,7 +219,7 @@ def diff_sections(a: list[Section], b: list[Section]) -> list[SectionDiff]:
 
 @dataclass
 class FigureDiff:
-    status: str  # "same", "changed", "added", "removed"
+    status: Status
     name: str
     old: Where | None
     new: Where | None

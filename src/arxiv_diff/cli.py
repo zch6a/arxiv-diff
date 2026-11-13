@@ -221,7 +221,7 @@ def _main(argv: list[str] | None, client: Client | None) -> int:
         return 2
 
     if args.format == "json":
-        payload: Any = [to_json(d, info) for d, _, info in diffs]
+        payload = [to_json(d, info) for d, _, info in diffs]
         out = json.dumps(payload if args.all else payload[0], indent=2, ensure_ascii=False) + "\n"  # --all: always a list
     elif args.format == "html":
         out = html.page([(d, line) for d, line, _ in diffs])
