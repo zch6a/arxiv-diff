@@ -16,7 +16,7 @@
 
 ---
 
-arXiv 保存了论文的每个版本，却只给你看 PDF。审稿人核对修改稿、读者引用某个数字、复现结果的团队，都想知道自己依赖的数字是否还是论文里的那个。
+arXiv 保存了论文的每个版本，却只给你看 PDF。审稿人核对修改稿，读者引用某个数字，复现结果的团队也是，都想知道自己依赖的数字是否还是论文里的那个。
 对 LaTeX 做文本 diff，会被重新折行和挪动的段落淹没；latexdiff 生成一份标注过的 PDF，你还得从头读到尾。arxiv-diff 比较的是论文说了什么，并把结果放在最前面。
 
 它在 *Attention Is All You Need* 上的真实输出（v1，2017 年 6 月，对比 v7，2023 年 8 月；有删节）：
@@ -96,7 +96,7 @@ arxiv-diff paper-v1/ paper-v2/            # 两个 LaTeX 文件夹（或两个�
 | **参考文献** | 引用的文献增删（只改 key 不算），以及从预印本变成正式发表版本的条目 |
 
 LaTeX 的读取方式与 [paper-proof](https://github.com/zch6a/paper-proof) 相同：跟随 `\input` 和 `\include`，去掉注释和 `\iffalse` 块。
-文档里自定义的命令连同参数会被展开（`\newcommand{\method}{FooNet}`、`\newcommand{\cell}[2]{#1$\pm$#2}`），`\iflatexml` 分支不读，文字读起来就是论文印出来的样子；引用显示为 `[keys]`，交叉引用显示为 `‹labels›`，公式保持原样。
+文档里自定义的命令连同参数会被展开（`\newcommand{\method}{FooNet}`、`\newcommand{\cell}[2]{#1$\pm$#2}`），`\iflatexml` 分支不读，文字读起来就是论文印出来的样子。引用显示为 `[keys]`，交叉引用显示为 `‹labels›`，公式保持原样。
 
 ## 在 Pull Request 里用
 

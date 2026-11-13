@@ -282,3 +282,9 @@ https://github.com/zch6a/arxiv-diff/releases/tag/v0.1.0 — the release workflow
 and CHANGELOG checked), made the release with the wheel and the source archive, and moved `v0` to the release
 commit, so `uses: zch6a/arxiv-diff@v0` works. Not published to PyPI (and cannot be as it stands: its dependency,
 paper-proof, is a git reference).
+
+### 2026-11-14 — Chinese README: AI tone
+
+- 2 places: a 3-item 顿号 list used as the subject of a sentence turned into clauses (who needs to know which numbers changed), and a semicolon between two independent sentences split into a full stop (how LaTeX is read).
+- The checks follow the findings of lieflat-less-ai-tone (shiujan, CC BY-NC 4.0); its findings applied, its text not copied.
+- Left as they are: the feature enumeration in the opening (it must be complete), the field and paper lists in parentheses, the semicolon list of problems found by measuring, colon-led lists, tables.
