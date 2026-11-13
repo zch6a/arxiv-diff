@@ -149,3 +149,47 @@ Next: five polishing rounds, then v0.1.0.
    hostile text in a synthetic paper's title, abstract, a sentence, a caption and a table row renders as text only.
    That check found a list placed right under the table being read as more table rows, and caption changes and
    renamed rows and columns missing from the Markdown report; both fixed.
+
+## Polishing round 2 (2026-11-13)
+
+1. **Function: 16 more real papers.** The rest of paper-proof's 50 (2207.12598 to 2312.00752): 16 with several
+   versions (Mamba's v1 is PDF-only, reported as such). 156 table changes, 8 numbers in the text; the independent
+   audit: 0 unexplained numbers in 200 table pairs. By hand: MT-Bench (GPT-4 Writing 62.9% → 61.2%), LLaVA-1.5
+   (MME 502.8 → 809.6, the right row though keyed by position) are real. Found:
+   - **BLIP-2 relabelled a table's columns** ("val, test-dev" became "test-dev, test-std", same numbers): the column
+     headed "test-dev" did change from 76.04 to 75.84, but the reader must know the numbers only moved. Now: old
+     columns whose numbers stand under another header are named, "numbers now under another header: val →
+     test-dev; test-dev → test-std (headers corrected? the changes above may be relabelling)";
+   - authors separated by escaped spaces (`\ \ \ \ \ `, the diffusion survey) read as one six-word name; names set
+     in `\texttt` (ControlNet v1) dropped with the e-mail addresses `\texttt` usually holds. Both fixed.
+   The sources are deleted.
+2. **Code: a second independent review** (the reports, the HTML page, the docs against the behaviour). Fixed, each
+   with a test in `tests/test_review2.py`:
+   - `--fail-on results` and the headline missed results: a table result replaced by text (`41.0` → `--`), and a
+     number changed in a sentence where another was added beside it (`28.4` → `28.9 (std 0.2)`);
+   - sections that only swapped places reported "no changes" (and `--fail-on any` passed);
+   - "better"/"worse" from words that are not metrics (a caption's "is" read as Inception Score: `Layers: 6 → 12
+     (+6, better)`); a changed spread (`4.1 ± 0.2 → 4.1 ± 0.5`) counted as a changed result. Now captions give a
+     direction only by an arrow, "higher/lower is better" or an unambiguous metric; spreads are cell changes;
+   - figure file names and source paths sent to the terminal without making control characters visible;
+   - Markdown: every numbers-only line (`- # ...`) was a heading; no list of the numbers changed in the text; rows
+     added only counted, not named; conclusions cut at 30 without saying so;
+   - an unexpected error exited 1, which reads as "results changed": now 2; a one-version paper gave no JSON; the
+     JSON was an object or a list depending on how many steps: `--all` is always a list;
+   - HTML: the numbers filter hid caption diffs and left empty sections; no "Numbers in the text"; "1 sentences";
+     the fold link said "unfold all" over open sections; moved-only sections missing; one title for several steps;
+     the CSP allowed any inline script: now only the page's own, by its hash (checked in Chrome);
+   - the terminal cut captions at 70 characters (an edit after that showed no change): now a word diff;
+   - the headline said nothing about rows added or removed in tables; renamed lists cut at 12 without a marker;
+     `--full` did not show added or removed sections' sentences;
+   - the Action and SECURITY said the tool runs "at the action's own ref", but paper-proof came from a movable tag:
+     now pinned by commit;
+   - docs: the JSON's "file and line on both sides" (only sentences have them; cells have the new line), `--full`
+     and `--keep`, the Skill's report order, the Chinese sample, the demo image's description, `.bst`, and two
+     places still saying macros with arguments are compared as written.
+3. **Tests**: 63 → 78; a backslash inside an f-string expression (valid on 3.12+, a syntax error on 3.10) was caught
+   by ruff before the commit.
+4. **Experience**: the HTML page's navigation reaches every part; the terminal's caption changes are readable.
+5. **Docs**: as above; both READMEs say the same.
+6. **Engineering**: CI green; the one dependency pinned by commit.
+7. **Security and privacy**: the CSP by hash; control characters in every name the paper controls.
