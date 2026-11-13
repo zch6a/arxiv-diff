@@ -148,7 +148,7 @@ def test_a_fully_rewritten_section_is_compared_quickly(tmp_path: Path) -> None:
     import random
     import time
 
-    vocab = "model data attention layer training results improves baseline accuracy method task network".split()
+    vocab = ["model", "data", "attention", "layer", "training", "results", "improves", "baseline", "accuracy", "method", "task", "network"]
 
     def section(edit: bool) -> str:
         out = []
