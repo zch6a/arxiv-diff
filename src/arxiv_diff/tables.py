@@ -186,20 +186,23 @@ def _is_spread(text: str, k: int) -> bool:
 
 
 def caption_direction(caption: str) -> str:
-    """Which way is better, from a caption: an arrow or "higher/lower is better", or a metric named without doubt
+    r"""Which way is better, from a caption: an arrow or "higher/lower is better", or a metric named without doubt
     (BLEU, accuracy, FID), never words that are also plain English ("is", "time", "score").
 
     >>> caption_direction("BLEU scores on newstest2014."), caption_direction("Model sizes; the best is in bold.")
     ('higher', '')
     >>> caption_direction("Error (lower is better).")
     'lower'
+    >>> caption_direction(r"$\uparrow$/$\downarrow$: higher/lower is better."), caption_direction("FID and IS on ImageNet.")
+    ('', '')
     """
-    if re.search(r"\\uparrow|↑|higher is better", caption, re.I):
-        return "higher"
-    if re.search(r"\\downarrow|↓|lower is better", caption, re.I):
-        return "lower"
-    ways = {"higher" for m in HIGHER.finditer(caption) if m.group(0).lower() not in UNCLEAR}
-    ways |= {"lower" for m in LOWER.finditer(caption) if m.group(0).lower() not in UNCLEAR}
+    up = bool(re.search(r"\\uparrow|↑|higher is better", caption, re.I))
+    down = bool(re.search(r"\\downarrow|↓|lower is better", caption, re.I))
+    if up or down:
+        return "" if up and down else "higher" if up else "lower"  # both: each column has its own
+    # a word that is also plain English counts only written as a metric (IS, EM, mAP), not as a word ("is", "map")
+    clear = lambda m: m.group(0).lower() not in UNCLEAR or not m.group(0).islower()  # noqa: E731
+    ways = {"higher" for m in HIGHER.finditer(caption) if clear(m)} | {"lower" for m in LOWER.finditer(caption) if clear(m)}
     return ways.pop() if len(ways) == 1 else ""
 
 

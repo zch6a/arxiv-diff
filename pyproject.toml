@@ -38,6 +38,10 @@ allow-direct-references = true
 [tool.hatch.build.targets.wheel]
 packages = ["src/arxiv_diff"]
 
+[tool.hatch.build.targets.sdist]
+# the repository's social preview is for GitHub, not for the source archive
+exclude = ["docs/social-preview.png"]
+
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.10"]
 

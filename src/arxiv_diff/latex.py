@@ -42,7 +42,8 @@ class Source:
         return file, bisect.bisect_left(self.newlines[file], local) + 1
 
 
-ALWAYS_FALSE = re.compile(r"\\iflatexml\b")  # arXiv's HTML conversion: false when the PDF is made
+# arXiv's HTML conversion: false when the PDF is made; not where it is declared (\newif\iflatexml)
+ALWAYS_FALSE = re.compile(r"(?<!\\newif)(?<!\\def)(?<!\\let)(?<!\\providecommand\{)(?<!\\newcommand\{)\\iflatexml\b")
 
 
 def false_branches(text: str) -> str:
@@ -51,24 +52,32 @@ def false_branches(text: str) -> str:
 
     >>> false_branches(r"a \iflatexml HTML \ifx x y\fi only \else PDF \fi b")
     'a                                        PDF \\fi b'
+    >>> false_branches(r"\newif\iflatexml x. \iflatexml $p \iff q$ \fi y.")
+    '\\newif\\iflatexml x.                           y.'
+    >>> false_branches(r"a \iflatexml never closed")  # nothing is blanked when no \fi ends it
+    'a \\iflatexml never closed'
     """
     out, i = [], 0
     for m in ALWAYS_FALSE.finditer(text):
         if m.start() < i:
             continue
-        depth, end = 1, len(text)
+        depth, end = 1, -1
         for t in re.finditer(r"\\(if[a-zA-Z@]*|else|fi)\b", text[m.end() :]):
             word = t.group(1)
+            if word in ("iff", "ifthenelse", "iftoggle"):  # \iff is "if and only if"; the others are not TeX conditionals
+                continue
             if word == "fi":
                 depth -= 1
             elif word == "else" and depth == 1:
                 end = m.end() + t.end()  # the \else branch stays
                 break
-            elif word not in ("else", "ifthenelse", "iftoggle"):
+            elif word != "else":
                 depth += 1
             if depth == 0:
                 end = m.end() + t.end()
                 break
+        if end < 0:  # never closed: rather keep the text than lose the rest of the paper
+            continue
         out += [text[i : m.start()], re.sub(r"[^\n]", " ", text[m.start() : end])]
         i = end
     out.append(text[i:])
@@ -604,8 +613,8 @@ NOT_A_NAME = re.compile(
     r"|apple|ibm|intel|baidu|alibaba|tencent|huawei|bytedance|anonymous|authors?|equal|contribution|correspond\w*"
     r"|email|e-mail|address|street|road|usa|china|germany|france|canada|japan|korea|uk|city|state|province"
     r"|engineering|sciences?|informatics|computing|technology|polytechnic|hospital|foundation|ai2"
-    r"|mit|cmu|stanford|berkeley|harvard|princeton|oxford|cambridge|eth|epfl|inria|mila|tsinghua|peking|kaist|ucla|ucl"
-    r"|nyu|toronto|montreal|zurich|zürich|tübingen|tuebingen|edinburgh|imperial|cornell|columbia|yale|caltech|ntu|nus)\b",
+    r"|mit|cmu|stanford|berkeley|harvard|princeton|oxford|cambridge|epfl|inria|tsinghua|peking|kaist|ucla|ucl"
+    r"|nyu|toronto|montreal|zurich|zürich|tübingen|tuebingen|edinburgh|imperial|cornell|columbia|caltech|ntu|nus)\b",  # not Mila, Yale: names too
     re.I,
 )
 

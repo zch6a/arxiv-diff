@@ -52,8 +52,13 @@ jobs:
               --notes-file dist/notes.md --verify-tag --repo "$GITHUB_REPOSITORY"
           fi
           sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$GITHUB_REF_NAME" --jq .object.sha)"
-          # An annotated tag points to a tag object: move the major tag to the commit it points to.
-          commit="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$sha" --jq .object.sha 2>/dev/null || echo "$sha")"
+          type="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$GITHUB_REF_NAME" --jq .object.type)"
+          # An annotated tag points to a tag object, a plain tag to the commit: the major tag goes to the commit.
+          commit="$sha"
+          if [ "$type" = "tag" ]; then
+            commit="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$sha" --jq .object.sha)"
+          fi
+          case "$commit" in *[!0-9a-f]* | "") echo "not a commit: $commit" >&2; exit 1 ;; esac
           if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$major" > /dev/null 2>&1; then
             gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/$major" -f sha="$commit" -F force=true > /dev/null
           else

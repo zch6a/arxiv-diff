@@ -64,7 +64,8 @@ def diff_sentences(a: list[Sentence], b: list[Sentence]) -> list[Change]:
             if i1 + pi < i2:
                 x, y = a[i1 + pi], b[j1 + pj]
                 numbers = number_changes(x.text, y.text) if x.kind == y.kind == "text" else []  # a displayed equation is a formula
-                out.append(Change("changed", x, y, word_diff(x.text, y.text), numbers, _numbers_only(x.text, y.text)))
+                only = bool(numbers) and _numbers_only(x.text, y.text)  # "#" only with numbers to show
+                out.append(Change("changed", x, y, word_diff(x.text, y.text), numbers, only))
             i, j = i1 + pi + 1, j1 + pj + 1
     return out
 
@@ -270,16 +271,29 @@ def diff_figures(a: list[Figure], b: list[Figure]) -> list[FigureDiff]:
     return out
 
 
-def _person(name: str) -> str:
-    """A name compared without accents, case, middle names or initials: by its first initial and surname, so "Ed H.
-    Chi" is "Ed Chi" and "E. Elmakies" is "Elad Elmakies".
+def _person(name: str) -> tuple[str, str]:
+    """(first name, surname) without accents, case or middle names; a first name written as an initial stays one
+    letter.
 
-    >>> _person("Ed H. Chi") == _person("Ed Chi"), _person("E. Elmakies") == _person("Elad Elmakies"), _person("Björn Ommer")
-    (True, True, 'b ommer')
+    >>> _person("Ed H. Chi"), _person("E. Elmakies"), _person("Björn Ommer")
+    (('ed', 'chi'), ('e', 'elmakies'), ('bjorn', 'ommer'))
     """
     s = unicodedata.normalize("NFKD", name)
     words = re.findall(r"[^\W\d_]+", "".join(c for c in s if not unicodedata.combining(c)).lower())  # any script
-    return f"{words[0][0]} {words[-1]}" if len(words) >= 2 else " ".join(words)
+    return (words[0], words[-1]) if len(words) >= 2 else ("", words[0] if words else "")
+
+
+def same_person(a: str, b: str) -> bool:
+    """The same surname, and the same first name, or an initial that fits it: "Ed H. Chi" is "Ed Chi", "E. Elmakies" is
+    "Elad Elmakies", but "Yu Zhang" is not "Yang Zhang".
+
+    >>> same_person("Ed H. Chi", "Ed Chi"), same_person("E. Elmakies", "Elad Elmakies"), same_person("Yu Zhang", "Yang Zhang")
+    (True, True, False)
+    """
+    (fa, sa), (fb, sb) = _person(a), _person(b)
+    if sa != sb:
+        return False
+    return fa == fb or (min(len(fa), len(fb)) == 1 and fa[:1] == fb[:1])
 
 
 @dataclass
@@ -299,11 +313,11 @@ class AuthorDiff:
 def diff_authors(a: list[str], b: list[str]) -> AuthorDiff:
     if bool(a) != bool(b):  # names typed into the page without \\author, in one version: not a change of authors
         return AuthorDiff(a, b, unread="new" if a else "old")
-    ka, kb = [_person(n) for n in a], [_person(n) for n in b]
-    d = AuthorDiff(a, b, [n for n, k in zip(b, kb, strict=True) if k not in ka], [n for n, k in zip(a, ka, strict=True) if k not in kb])
-    common_a = [k for k in ka if k in kb]
-    common_b = [k for k in kb if k in ka]
-    d.reordered = common_a != common_b
+    match = {i: next((j for j, y in enumerate(b) if same_person(x, y)), None) for i, x in enumerate(a)}
+    matched_b = {j for j in match.values() if j is not None}
+    d = AuthorDiff(a, b, [y for j, y in enumerate(b) if j not in matched_b], [x for i, x in enumerate(a) if match[i] is None])
+    order = [j for i in range(len(a)) if (j := match[i]) is not None]
+    d.reordered = order != sorted(order)
     return d
 
 

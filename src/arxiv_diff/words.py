@@ -104,7 +104,8 @@ class NumberChange:
 MATH = re.compile(r"(?<!\\)\$((?:\\.|[^$\\]){1,4000})\$|\\\(((?:.|\n){0,4000}?)\\\)")
 
 
-PLAIN_NUMBER = re.compile(r"\s*(?:\\sim|\\approx|<|>|\\le|\\ge)?\s*([-+−]?\d+(?:[.,]\d+)*)\s*(?:\\%|%)?\s*")
+PLAIN_NUMBER = re.compile(r"\s*(?:\\sim|\\approx|<|>|\\le|\\ge)?\s*([-+−]?\d+(?:[.,]\d+)*)\s*(?:\\%|%|\\times)?\s*")
+STYLE = re.compile(r"\\(?:mathbf|mathrm|textbf|text|bm|boldsymbol|underline|mathit)\s*\{([^{}]*)\}")
 
 
 def _math_out(s: str) -> str:
@@ -112,14 +113,18 @@ def _math_out(s: str) -> str:
     of a sentence are its results, not the coefficients and exponents of its formulas (whose changes the word diff
     shows).
 
-    >>> _math_out(r"We reach $28.4$ BLEU, since $\frac{1}{2} x^2 \le 3$.")
-    'We reach 28.4 BLEU, since ⟨math⟩.'
+    >>> _math_out(r"We reach $28.4$ BLEU, $3\times$ faster, $\mathbf{91.2}$, since $\frac{1}{2} x^2 \le 3$.")
+    'We reach 28.4 BLEU, 3 faster, 91.2, since [formula].'
+    >>> _math_out("We spent $500 on data and $300 on compute.")  # dollars, not a formula
+    'We spent $500 on data and $300 on compute.'
     """
 
     def keep(m: re.Match[str]) -> str:
         body = m.group(1) if m.group(1) is not None else m.group(2)
-        plain = PLAIN_NUMBER.fullmatch(body)
-        return plain.group(1) if plain else "⟨math⟩"
+        if m.group(1) is not None and "\\" not in body and re.search(r"[A-Za-z]{3,}\s+[A-Za-z]{3,}", body):
+            return m.group(0)  # prose between two dollar signs ("$500 on data and $300"): money, not math
+        plain = PLAIN_NUMBER.fullmatch(STYLE.sub(r"\1", body))
+        return plain.group(1) if plain else "[formula]"  # one token: shown as context, never a number
 
     return MATH.sub(keep, s)
 
@@ -182,16 +187,43 @@ def similarity(a: str, b: str) -> float:
     return _ratio(SequenceMatcher(None, wa, wb, autojunk=False), len(wa), len(wb))
 
 
+def _candidates(wa: list[list[str]], wb: list[list[str]], band: int, top: int = 12) -> list[set[int]]:
+    """For each old text, the new texts worth comparing it with: those near its place in order (`band`), and those
+    sharing its distinctive words (rare in the new texts), wherever they are: a passage moved, or removed at one end
+    of a section while another was added at the other, is still found."""
+    n, m = len(wa), len(wb)
+    index: dict[str, list[int]] = {}
+    for j, words in enumerate(wb):
+        for w in set(words):
+            index.setdefault(w, []).append(j)
+    common = max(3, m // 5)  # a word in more texts than this says nothing about which one
+    out = []
+    for i, words in enumerate(wa):
+        centre = round(i * m / n)
+        near = set(range(max(0, centre - band), min(m, centre + band + 1)))
+        score: dict[int, float] = {}
+        for w in set(words):
+            js = index.get(w, ())
+            if len(js) <= common:
+                for j in js:
+                    score[j] = score.get(j, 0.0) + 1.0 / len(js)
+        out.append(near | set(sorted(score, key=lambda j: -score[j])[:top]))
+    return out
+
+
 def _similarities(wa: list[list[str]], wb: list[list[str]], band: int, floor: float = 0.3) -> list[list[float]]:
-    """How alike each old text is to each new one within `band` places of where it would fall in order (0 outside):
-    each text tokenized once, each new text's index built once (SequenceMatcher keeps it while the old one varies)."""
+    """How alike each old text is to each candidate new one (0 for the others): each text tokenized once, each new
+    text's index built once (SequenceMatcher keeps it while the old one varies)."""
     n, m = len(wa), len(wb)
     sim = [[0.0] * m for _ in range(n)]
-    for j in range(m):
+    by_new: dict[int, list[int]] = {}
+    for i, js in enumerate(_candidates(wa, wb, band)):
+        for j in js:
+            by_new.setdefault(j, []).append(i)
+    for j, olds in by_new.items():
         sm: SequenceMatcher[str] = SequenceMatcher(None, autojunk=False)
         sm.set_seq2(wb[j])
-        centre = round(j * n / m)
-        for i in range(max(0, centre - band), min(n, centre + band + 1)):
+        for i in olds:
             sm.set_seq1(wa[i])
             sim[i][j] = _ratio(sm, len(wa[i]), len(wb[j]), floor)
     return sim
@@ -200,7 +232,7 @@ def _similarities(wa: list[list[str]], wb: list[list[str]], band: int, floor: fl
 def _pair(a: list[str], b: list[str], threshold: float, bonus: Callable[[int, int], float] | None = None) -> list[tuple[int, int]]:
     """Pairs (i, j) of similar texts, in order on both sides, with the largest total similarity. A text is compared
     with those near its own place in the other list (a rewritten passage keeps its order), so a long run of changed
-    sentences costs a band, not a square.
+    sentences costs a band (and the passages that share distinctive words), not a square.
 
     >>> _pair(["the cat sat", "a dog ran far", "new words here"], ["a dog ran very far", "the cat sat down"], 0.5)
     [(1, 0)]
@@ -209,9 +241,7 @@ def _pair(a: list[str], b: list[str], threshold: float, bonus: Callable[[int, in
     if not n or not m:
         return []
     wa, wb = [_words(x) for x in a], [_words(y) for y in b]
-    band = n + m if n * m <= 400 else 12 + abs(n - m)
-    if n * m > 40_000:  # a very long run of changed text: a narrow band
-        band = 30
+    band = n + m if n * m <= 400 else 12 + min(abs(n - m), 40)
     sim = _similarities(wa, wb, band, max(0.3, threshold))  # below the threshold a pair is not taken anyway
     if bonus is not None:  # among texts alike enough, prefer the pair the bonus favours
         sim = [[v + bonus(i, j) if v >= threshold else v for j, v in enumerate(row)] for i, row in enumerate(sim)]

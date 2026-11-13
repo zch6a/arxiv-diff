@@ -123,7 +123,10 @@ def _about(a: Side, b: Side, records: dict[str, Record]) -> tuple[str, dict[str,
 
 def _load(side: Side, client: Client, tmp: Path, cache: dict[tuple[str, int], Paper]) -> Paper:
     if side.folder is not None:
-        return load(side.folder, side.label())
+        paper = load(side.folder, side.label())
+        if "/" in paper.main:  # a folder above the paper's: say which main file was found
+            paper.label = f"{side.label()} ({paper.main})"
+        return paper
     assert side.version is not None
     key = (side.arxiv_id, side.version)
     if key not in cache:
@@ -205,8 +208,9 @@ def _main(argv: list[str] | None, client: Client | None) -> int:
             ap.error(str(e))
         if not pairs:
             print(f"arxiv-diff: {sides[0].arxiv_id} has only one version on arXiv: nothing to compare", file=sys.stderr)
-            if args.format == "json":  # a JSON reader still gets JSON: no comparisons
-                _write(args.output, "[]\n")
+            if args.format == "json":  # a JSON reader still gets JSON of the usual shape
+                none = {"tool": "arxiv-diff", "tool_version": __version__, "arxiv_id": sides[0].arxiv_id, "changed": False, "versions": 1}
+                _write(args.output, "[]\n" if args.all else json.dumps(none, indent=2) + "\n")
             return 0
         failed: list[str] = []
         with tempfile.TemporaryDirectory(prefix="arxiv-diff-") as tmp:

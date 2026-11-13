@@ -87,14 +87,15 @@ arxiv-diff paper-v1/ paper-v2/            # two LaTeX folders (or two main .tex 
 | `--keep DIR` | keep the arXiv sources it fetched, as unpacked (the `.tex`, `.bib`, `.bbl`, `.sty`, `.cls`, `.bst` files; otherwise deleted) |
 
 It exits with 0 when the comparison is done, 1 when `--fail-on` says so, and 2 when it could not compare (a version
-arXiv does not have, a PDF-only version, a folder without a LaTeX document).
+arXiv does not have, a PDF-only version, a folder without a LaTeX document). With `--all`, the steps that can be
+compared are reported and the others named; the exit is then 2 (or 1, when `--fail-on` says so).
 
 ## What it compares
 
 | | |
 |---|---|
 | **Tables** | paired by `\label`, then caption, then rows and columns; cells by row name and column header, so a row that moved is still the same row. A changed number (with the difference, and "better"/"worse" when the column's metric or ↑/↓ says which way is better), a changed or cleared cell, the bold "best" marker moving, rows and columns added or removed, the caption |
-| **Numbers in the text** | each number that changed in a sentence, with the words around it; `#` marks a sentence where only numbers changed |
+| **Numbers in the text** | each number that changed in a sentence, with the words around it (not those inside formulas, citation keys, reference labels or DOIs: a changed formula shows in the sentence's word diff); `#` marks a sentence where only numbers changed |
 | **Sections** | paired by title, then by text: a renamed section is still the same section, a moved one is marked moved; sentences paired within, each changed one as a word diff; a sentence that moved to another section is "moved", not removed and added |
 | **Abstract, conclusion** | listed on their own |
 | **Front matter** | title; authors added, removed or reordered (affiliations, e-mails and footnotes left out) |
@@ -102,8 +103,9 @@ arXiv does not have, a PDF-only version, a folder without a LaTeX document).
 | **References** | cited references added and removed (a key renamed is not a change), and an entry that went from preprint to published version |
 
 The LaTeX is read the way [paper-proof](https://github.com/zch6a/paper-proof) reads it: `\input` and `\include`
-followed, comments and `\iffalse` blocks dropped. The document's own argument-less macros are expanded
-(`\newcommand{\method}{FooNet}`), so the text reads as the paper prints it; citations show as `[keys]`, references as
+followed, comments, `\iffalse` and `\iflatexml` blocks dropped. The document's own commands are expanded, with
+their arguments (`\newcommand{\method}{FooNet}`, `\newcommand{\cell}[2]{#1$\pm$#2}`), so the text reads as the paper
+prints it; citations show as `[keys]`, references as
 `‹labels›`, math as written.
 
 ## In a pull request

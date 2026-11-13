@@ -88,7 +88,10 @@ def test_one_version_gives_json_still(tmp_path: Path, capsys: pytest.CaptureFixt
     fake.get = lambda url: one.encode() if "oai2" in url else fake.sources[1]  # type: ignore[method-assign]
     out = tmp_path / "r.json"
     assert main(["2501.00001", "--format", "json", "-o", str(out)], client=fake.client()) == 0
-    assert json.loads(out.read_text(encoding="utf-8")) == []
+    report = json.loads(out.read_text(encoding="utf-8"))  # an object, as for any comparison without --all
+    assert report["changed"] is False and report["versions"] == 1 and report["arxiv_id"] == "2501.00001"
+    assert main(["2501.00001", "--all", "--format", "json", "-o", str(out)], client=fake.client()) == 0
+    assert json.loads(out.read_text(encoding="utf-8")) == []  # --all: a list, of no steps
     assert "only one version" in capsys.readouterr().err
 
 
