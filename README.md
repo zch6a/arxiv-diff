@@ -104,7 +104,7 @@ arXiv does not have, a PDF-only version, a folder without a LaTeX document).
 The LaTeX is read the way [paper-proof](https://github.com/zch6a/paper-proof) reads it: `\input` and `\include`
 followed, comments and `\iffalse` blocks dropped. The document's own argument-less macros are expanded
 (`\newcommand{\method}{FooNet}`), so the text reads as the paper prints it; citations show as `[keys]`, references as
-`(labels)`, math as written.
+`‹labels›`, math as written.
 
 ## In a pull request
 

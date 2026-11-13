@@ -24,10 +24,11 @@ from .paper import Paper
 
 # ---------------------------------------------------------------- words and numbers
 
-# a URL; a citation's keys, whole ([huang2019evaluating] is not the year 2019); a number (a minus sign only where
+# a URL; a DOI; a citation's keys, whole ([huang2019evaluating] is not the year 2019); a reference ‹label›; a number (a minus sign only where
 # a sign can be: not the hyphen of WikiText-103); a command; a word; a mark
 TOKEN = re.compile(
-    r"\s*(?:https?://[^\s)\]]+[^\s)\].,;:]|\[(?=[^\]]*[A-Za-z])[^\[\]]{1,300}\]|(?:(?<![\w)])[-−])?\d+(?:[.,]\d+)*"
+    r"\s*(?:https?://[^\s)\]]+[^\s)\].,;:]|\b10\.\d{4,9}/[^\s,;]+[^\s,;.)]|\[(?=[^\]]*[A-Za-z])[^\[\]]{1,300}\]|‹[^›]{0,300}›"
+    r"|(?:(?<![\w)])[-−])?\d+(?:[.,]\d+)*"
     r"|\\[A-Za-z]+|[^\W\d_]+|\w+|[^\w\s])"
 )
 NUMBER = re.compile(r"[-−]?\d+(?:[.,]\d+)*")
@@ -108,6 +109,27 @@ class NumberChange:
     after: str
 
 
+MATH = re.compile(r"(?<!\\)\$((?:\\.|[^$\\]){1,4000})\$|\\\(((?:.|\n){0,4000}?)\\\)")
+PLAIN_NUMBER = re.compile(r"\s*(?:\\sim|\\approx|<|>|\\le|\\ge)?\s*([-+−]?\d+(?:[.,]\d+)*)\s*(?:\\%|%)?\s*")
+
+
+def _math_out(s: str) -> str:
+    r"""A sentence with its formulas set aside, a number written in math mode ($28.4$, $\sim 2.0$) kept: the numbers
+    of a sentence are its results, not the coefficients and exponents of its formulas (whose changes the word diff
+    shows).
+
+    >>> _math_out(r"We reach $28.4$ BLEU, since $\frac{1}{2} x^2 \le 3$.")
+    'We reach 28.4 BLEU, since ⟨math⟩.'
+    """
+
+    def keep(m: re.Match[str]) -> str:
+        body = m.group(1) if m.group(1) is not None else m.group(2)
+        plain = PLAIN_NUMBER.fullmatch(body)
+        return plain.group(1) if plain else "⟨math⟩"
+
+    return MATH.sub(keep, s)
+
+
 def number_changes(a: str, b: str) -> list[NumberChange]:
     """The numbers that changed between two versions of a sentence, each with the words around it.
 
@@ -117,7 +139,7 @@ def number_changes(a: str, b: str) -> list[NumberChange]:
     >>> number_changes("as high as 12288 [smith2019]", "as high as 12,288 [smith2020]"), number_changes("of 42k examples", "of 42,000 examples")
     ([], [])
     """
-    ta, tb = tokens(a), tokens(b)
+    ta, tb = tokens(_math_out(a)), tokens(_math_out(b))
     sa, sb = [t.strip() for t in ta], [t.strip() for t in tb]
     out = []
     for op, i1, i2, j1, j2 in opcodes(sa, sb):
@@ -226,7 +248,8 @@ def diff_sentences(a: list[Sentence], b: list[Sentence]) -> list[Change]:
             out += [Change("added", new=b[k]) for k in range(j, j1 + pj)]
             if i1 + pi < i2:
                 x, y = a[i1 + pi], b[j1 + pj]
-                out.append(Change("changed", x, y, word_diff(x.text, y.text), number_changes(x.text, y.text), _numbers_only(x.text, y.text)))
+                numbers = number_changes(x.text, y.text) if x.kind == y.kind == "text" else []  # a displayed equation is a formula
+                out.append(Change("changed", x, y, word_diff(x.text, y.text), numbers, _numbers_only(x.text, y.text)))
             i, j = i1 + pi + 1, j1 + pj + 1
     return out
 
@@ -771,14 +794,15 @@ def diff_figures(a: list[Figure], b: list[Figure]) -> list[FigureDiff]:
 
 
 def _person(name: str) -> str:
-    """A name compared without accents, case or middle initials: "Ed H. Chi" is "Ed Chi".
+    """A name compared without accents, case, middle names or initials: by its first initial and surname, so "Ed H.
+    Chi" is "Ed Chi" and "E. Elmakies" is "Elad Elmakies".
 
-    >>> _person("Ed H. Chi") == _person("Ed Chi"), _person("Björn Ommer")
-    (True, 'bjorn ommer')
+    >>> _person("Ed H. Chi") == _person("Ed Chi"), _person("E. Elmakies") == _person("Elad Elmakies"), _person("Björn Ommer")
+    (True, True, 'b ommer')
     """
     s = unicodedata.normalize("NFKD", name)
     words = re.findall(r"[^\W\d_]+", "".join(c for c in s if not unicodedata.combining(c)).lower())  # any script
-    return " ".join([words[0], words[-1]] if len(words) > 2 else words)
+    return f"{words[0][0]} {words[-1]}" if len(words) >= 2 else " ".join(words)
 
 
 @dataclass

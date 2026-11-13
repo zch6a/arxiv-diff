@@ -272,7 +272,7 @@ def _text(s: str) -> str:
             if CITE_NAME.match(name) or name in REF:
                 arg, j = _arg(s, j)
                 keys = ", ".join(k.strip() for k in (arg or "").split(",") if k.strip())
-                out.append(f"[{keys}]" if CITE_NAME.match(name) else f"({keys})")
+                out.append(f"[{keys}]" if CITE_NAME.match(name) else f"‹{keys}›")
             elif name in ("footnote", "thanks", "marginpar"):
                 arg, j = _arg(s, j)
                 out.append(f" (footnote: {_text(arg or '')})" if name == "footnote" else "")
@@ -324,10 +324,10 @@ def _text(s: str) -> str:
 
 def detex(s: str, defs: dict[str, tuple[int, str]] | None = None) -> str:
     r"""Prose as a reader sees it: the document's own macros expanded, formatting dropped, citations as [keys],
-    references as (labels), math kept as written (so a changed formula shows), spaces normalised.
+    references as ‹labels›, math kept as written (so a changed formula shows), spaces normalised.
 
     >>> detex(r"We train \textbf{BERT}~\cite{devlin, liu} (see Table~\ref{tab:main}); it reaches $F_1 = 91.2$\%.")
-    'We train BERT [devlin, liu] (see Table (tab:main)); it reaches $F_1 = 91.2$%.'
+    'We train BERT [devlin, liu] (see Table ‹tab:main›); it reaches $F_1 = 91.2$%.'
     >>> detex(r"A \emph{new} {\bf idea}\footnote{Joint work, $n=2$.} --- here, ``quoted''.")
     'A new idea (footnote: Joint work, $n=2$.) — here, "quoted".'
     >>> detex(r"\rule{0pt}{2ex}\multirow{4}{*}{(A)} \begin{center}\ours\end{center}", {"ours": (0, r"\textsc{FooNet}")})
@@ -578,7 +578,8 @@ NOT_A_NAME = re.compile(
 
 
 OUT_OF_NAMES = re.compile(
-    r"\\(?:thanks|Thanks|footnote|texttt|tt|email|url|href|affiliation|institute|inst|affil|orcid|orcidID|IEEEauthorrefmark)"
+    r"\\(?:thanks|Thanks|footnote|texttt|tt|email|url|href|affiliation|institute|inst|affil|orcid|orcidID|IEEEauthorrefmark"
+    r"|corref|cormark|fnref|fnmark|tnoteref|ead|orcidlink|IEEEmembership|corauth|authornote|textsuperscript)"
     r"\s*(?:\[[^\]]*\])?\s*\{(?:[^{}]|\{[^{}]*\})*\}|\\footnotemark(?:\[[^\]]*\])?|\\(?:small|footnotesize|scriptsize)\b"
 )
 # what separates one author from the next (or a name from what follows it)

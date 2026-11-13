@@ -284,6 +284,6 @@ def page(diffs: list[tuple[Diff, str]], title: str = "") -> str:
         '<meta name="referrer" content="no-referrer">'
         f"<title>{_e(title)}</title><style>{CSS}</style></head><body><main>{nav}{''.join(parts)}"
         f"<footer>Made by arxiv-diff {__version__}. Left: the old version; right: the new one. "
-        "Sentences are compared as plain text (formatting dropped, citations as [keys], references as (labels)).</footer>"
+        "Sentences are compared as plain text (formatting dropped, citations as [keys], references as ‹labels›).</footer>"
         f"</main><script>{SCRIPT}</script></body></html>\n"
     )

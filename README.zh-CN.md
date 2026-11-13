@@ -96,7 +96,7 @@ arxiv-diff paper-v1/ paper-v2/            # 两个 LaTeX 文件夹（或两个�
 | **参考文献** | 引用的文献增删（只改 key 不算），以及从预印本变成正式发表版本的条目 |
 
 LaTeX 的读取方式与 [paper-proof](https://github.com/zch6a/paper-proof) 相同：跟随 `\input` 和 `\include`，去掉注释和 `\iffalse` 块。
-文档里不带参数的自定义宏会被展开（`\newcommand{\method}{FooNet}`），文字读起来就是论文印出来的样子；引用显示为 `[keys]`，交叉引用显示为 `(labels)`，公式保持原样。
+文档里不带参数的自定义宏会被展开（`\newcommand{\method}{FooNet}`），文字读起来就是论文印出来的样子；引用显示为 `[keys]`，交叉引用显示为 `‹labels›`，公式保持原样。
 
 ## 在 Pull Request 里用
 

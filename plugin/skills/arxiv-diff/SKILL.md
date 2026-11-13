@@ -35,6 +35,6 @@ For a paper in a git repository, put the old version in a folder first (`git wor
   sentence where only numbers changed), figures (the image files and captions), and references (added, removed, or
   now cited as the published version).
 
-Sentences are compared as plain text (formatting dropped, citations as `[keys]`, references as `(labels)`), so a
+Sentences are compared as plain text (formatting dropped, citations as `[keys]`, references as `‹labels›`), so a
 change in formatting alone is not reported. Image contents are not compared, only which files a figure shows.
 When a reported change matters to the user's question, quote it with its file and line rather than paraphrasing.
