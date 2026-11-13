@@ -246,3 +246,32 @@ Next: five polishing rounds, then v0.1.0.
 6. **Engineering**: CI green. A commit went in with a lint warning in a test (fixed in the next commit); commits
    are now made only when ruff passes.
 7. **Security and privacy**: no new inputs or outputs this round.
+
+## Polishing round 5 (2026-11-13) — before 0.1.0
+
+1. **Function: a final independent review** (correctness, release readiness, a new user's path, docs). Fixed, each
+   a test in `tests/test_final.py`:
+   - **high**: a paper declaring `\newif\iflatexml` lost all its prose (the declaration was read as a branch that
+     never closed, and everything after it was blanked), as did `\iff` inside such a branch. Now declarations are
+     skipped, `\iff` is not a conditional, and a branch without its `\fi` blanks nothing;
+   - the release workflow failed to move `v0` on a plain (lightweight) tag: it now reads the tag's type;
+   - sentence pairing missed pairs when sentences were removed at one end of a long section and added at the other
+     (0 of 15 found): candidates now come from the sentences' distinctive words as well as from their place;
+   - "Yu Zhang" and "Yang Zhang" were one person (first initial and surname): an initial now only matches a first
+     name that starts with it; "Mila Nikolova" and "Yale Song" were taken for institutions;
+   - `\$500 ... \$300` read as a formula; results in math mode (`$3\times$`, `$\mathbf{91.2}$`) were left out;
+     the placeholder for a formula showed as `⟨math⟩` in the context words: now `[formula]`;
+   - `#` (only numbers changed) on sentences whose change was inside a formula, with no number to show;
+   - a one-version paper gave `[]` without `--all`, where every other run gives an object;
+   - captions with both arrows, or with FID and IS, gave a direction to every column;
+   - a folder above the paper's silently picked a main file: the report now names it;
+   - README: commands with arguments are expanded too (it still said argument-less), what "numbers in the text"
+     leave out, the exit status with `--all`.
+   Checked and fine: the release workflow's version check and CHANGELOG extraction; the wheel (the ten modules, the
+   licence, the entry point, the metadata, paper-proof pinned by commit).
+2. **Code**: the version is said once (a test compares `__version__`, `pyproject.toml` and the CHANGELOG).
+3. **Tests**: 90 → 101; Python 3.10 caught a `tomllib` import in a test (3.11+), replaced.
+4. **Experience**: `--help` explains the formats and colours and gives the exit status.
+5. **Docs**: the CHANGELOG's 0.1.0 section written in full; the README's measurement covers all 55 papers.
+6. **Engineering**: CI green; the social preview left out of the source archive.
+7. **Security and privacy**: unchanged; no network access in the tests, none in the review.
