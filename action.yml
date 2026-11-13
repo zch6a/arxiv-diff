@@ -45,14 +45,22 @@ runs:
         old="$OLD"
         if [ -z "$old" ]; then
           ref="${BASE:-${PR_BASE:-$PUSH_BEFORE}}"
+          case "$ref" in -*) echo "arxiv-diff: base must be a git ref, not '$ref'" >&2; exit 2 ;; esac
           if [ -z "$ref" ] || [ "$ref" = "0000000000000000000000000000000000000000" ]; then
-            ref="HEAD~1"
+            # no base (a manual run, a new branch): the commit before; a shallow checkout fetches it first
+            git rev-parse --verify --quiet HEAD~1 >/dev/null || git fetch --no-tags --deepen=1 origin "$(git rev-parse HEAD)"
+            ref="$(git rev-parse --verify --quiet HEAD~1)" || { echo "arxiv-diff: no commit before this one to compare with" >&2; exit 2; }
+          elif ! git rev-parse --verify --quiet "$ref^{commit}" >/dev/null; then
+            # not here yet (a shallow checkout, a branch name): fetch it, and use what was fetched
+            git fetch --no-tags --depth=1 origin "$ref"
+            ref="$(git rev-parse FETCH_HEAD)"
           fi
-          # the old version's files only (a shallow checkout may not have the commit yet)
-          git cat-file -e "$ref^{commit}" 2>/dev/null || git fetch --no-tags --depth=1 origin "$ref"
+          # the old version of the whole LaTeX folder (path may name the main .tex file in it)
+          folder="$PAPER"
+          [ -f "$PAPER" ] && folder="$(dirname "$PAPER")"
           old="$RUNNER_TEMP/arxiv-diff-old"
           mkdir -p "$old"
-          git archive "$ref" -- "$PAPER" | tar -x -C "$old"
+          git archive "$ref" -- "$folder" | tar -x -C "$old"
           old="$old/$PAPER"
         fi
         set +e

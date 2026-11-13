@@ -44,6 +44,30 @@ def _value(toks: list[str], k: int) -> float:
     return v * SCALE.get(nxt, 1.0) if nxt and not nxt[0].isspace() else v
 
 
+def opcodes(a: list[str], b: list[str]) -> list[tuple[str, int, int, int, int]]:
+    """SequenceMatcher's opcodes for two lists, the same beginning and end set aside first (most of two versions of
+    a paper), and a long remainder matched with its popular items ignored: hundreds of identical items (a hostile or
+    generated source) would otherwise take quadratic time.
+
+    >>> opcodes(list("abcxdef"), list("abcydef"))
+    [('equal', 0, 3, 0, 3), ('replace', 3, 4, 3, 4), ('equal', 4, 7, 4, 7)]
+    """
+    n, limit = 0, min(len(a), len(b))
+    while n < limit and a[n] == b[n]:
+        n += 1
+    m = 0
+    while m < limit - n and a[len(a) - 1 - m] == b[len(b) - 1 - m]:
+        m += 1
+    ops: list[tuple[str, int, int, int, int]] = [("equal", 0, n, 0, n)] if n else []
+    mid_a, mid_b = a[n : len(a) - m], b[n : len(b) - m]
+    if mid_a or mid_b:
+        sm = SequenceMatcher(None, mid_a, mid_b, autojunk=max(len(mid_a), len(mid_b)) > 2000)
+        ops += [(op, i1 + n, i2 + n, j1 + n, j2 + n) for op, i1, i2, j1, j2 in sm.get_opcodes()]
+    if m:
+        ops.append(("equal", len(a) - m, len(a), len(b) - m, len(b)))
+    return ops
+
+
 def tokens(s: str) -> list[str]:
     """Words, numbers and marks, each with the spaces before it (so joining them gives the text back, but for
     trailing spaces).
@@ -64,9 +88,8 @@ def word_diff(a: str, b: str) -> list[tuple[str, str]]:
     'an encoder and a decoder.'
     """
     ta, tb = tokens(a), tokens(b)
-    sm = SequenceMatcher(None, [t.strip() for t in ta], [t.strip() for t in tb], autojunk=False)
     out: list[tuple[str, str]] = []
-    for op, i1, i2, j1, j2 in sm.get_opcodes():
+    for op, i1, i2, j1, j2 in opcodes([t.strip() for t in ta], [t.strip() for t in tb]):
         if op == "equal":
             out.append(("=", "".join(tb[j1:j2])))
             continue
@@ -97,7 +120,7 @@ def number_changes(a: str, b: str) -> list[NumberChange]:
     ta, tb = tokens(a), tokens(b)
     sa, sb = [t.strip() for t in ta], [t.strip() for t in tb]
     out = []
-    for op, i1, i2, j1, j2 in SequenceMatcher(None, sa, sb, autojunk=False).get_opcodes():
+    for op, i1, i2, j1, j2 in opcodes(sa, sb):
         if op != "replace":
             continue
         na = [(i1 + k, t) for k, t in enumerate(sa[i1:i2]) if NUMBER.fullmatch(t)]
@@ -115,7 +138,7 @@ def number_changes(a: str, b: str) -> list[NumberChange]:
 def _numbers_only(a: str, b: str) -> bool:
     """Whether the two sentences differ in their numbers and nothing else."""
     sa, sb = [t.strip() for t in tokens(a)], [t.strip() for t in tokens(b)]
-    ops = [o for o in SequenceMatcher(None, sa, sb, autojunk=False).get_opcodes() if o[0] != "equal"]
+    ops = [o for o in opcodes(sa, sb) if o[0] != "equal"]
     return bool(ops) and all(o[0] == "replace" and all(NUMBER.fullmatch(t) or t == "%" for t in sa[o[1] : o[2]] + sb[o[3] : o[4]]) for o in ops)
 
 
@@ -193,7 +216,7 @@ def diff_sentences(a: list[Sentence], b: list[Sentence]) -> list[Change]:
     """The sentences added, removed and changed between two lists of sentences, in reading order."""
     ka, kb = [_key(s.text) for s in a], [_key(s.text) for s in b]
     out: list[Change] = []
-    for op, i1, i2, j1, j2 in SequenceMatcher(None, ka, kb, autojunk=False).get_opcodes():
+    for op, i1, i2, j1, j2 in opcodes(ka, kb):
         if op == "equal":
             continue
         pairs = _pair(ka[i1:i2], kb[j1:j2], 0.5)
@@ -277,7 +300,7 @@ def align_sections(a: list[Section], b: list[Section]) -> list[tuple[Section | N
         if i in match or not left_b:
             continue
         scored = [(1.0 if ka[i] == kb[j] and ka[i] else similarity(_text_of(a[i]), _text_of(b[j])), j) for j in left_b]
-        score, j = max(scored)
+        score, j = max(scored, key=lambda c: (c[0], -c[1]))  # on a tie, the first
         if score >= 0.6 and (ka[i] == kb[j] or len(_text_of(a[i]).split()) >= 20):
             match[i] = j
             moved.add(i)
@@ -490,7 +513,7 @@ def match_tables(a: list[Table], b: list[Table]) -> list[tuple[int, int]]:
     ):
         scored = sorted(
             ((score_of(t, u), i, j) for i, t in enumerate(a) if i not in used_a for j, u in enumerate(b) if j not in used_b),
-            reverse=True,
+            key=lambda c: (-c[0], c[1], c[2]),  # on a tie, the first of each
         )
         for score, i, j in scored:
             if score >= threshold and i not in used_a and j not in used_b:
@@ -527,7 +550,21 @@ def diff_table(a: Table, b: Table) -> TableDiff:
     # columns whose header changed a little ("WikiSQL Accuracy (%)" -> "WikiSQL Acc. (%)"): paired by header, in order
     left_ca = [(j, k) for j, k in enumerate(ca) if _norm(k) not in col_b]
     left_cb = [(j, k) for j, k in enumerate(cb) if _norm(k) not in col_a]
+    same_rows = [(i_a, row_b[_norm(k)]) for i_a, k in ra if _norm(k) in row_b]
+
+    def column_agrees(x: int, y: int) -> bool:
+        """Headers alike ("Accuracy (%)" -> "Acc. (%)") are one column if most of its numbers stayed; EN-DE and
+        EN-RO are alike in name only."""
+        ja, jb = left_ca[x][0], left_cb[y][0]
+        pairs_ = [(a.rows[i][ja], b.rows[j][jb]) for i, j in same_rows if ja < len(a.rows[i]) and jb < len(b.rows[j])]
+        numbers = [(p, q) for p, q in pairs_ if p.value is not None and q.value is not None]
+        if numbers:
+            return sum(p.value == q.value for p, q in numbers) >= 0.5 * len(numbers)
+        return similarity(left_ca[x][1], left_cb[y][1]) >= 0.8
+
     for x, y in _pair([k for _, k in left_ca], [k for _, k in left_cb], 0.5):
+        if not column_agrees(x, y):
+            continue
         col_a[_norm(left_cb[y][1])] = left_ca[x][0]
         d.columns_renamed.append((left_ca[x][1], left_cb[y][1]))
     renamed_cols = {o for o, _ in d.columns_renamed} | {n for _, n in d.columns_renamed}
@@ -635,7 +672,7 @@ def diff_figures(a: list[Figure], b: list[Figure]) -> list[FigureDiff]:
             if j not in used_b and (set(f.graphics) & set(g.graphics) or similarity(f.caption, g.caption) >= 0.6)
         ]
         if cands:
-            j = max(cands)[1]
+            j = max(cands, key=lambda c: (c[0], -c[1]))[1]  # on a tie, the first
             match[i] = j
             used_b.add(j)
     inverse = {j: i for i, j in match.items()}
@@ -667,7 +704,7 @@ def _person(name: str) -> str:
     (True, 'bjorn ommer')
     """
     s = unicodedata.normalize("NFKD", name)
-    words = re.findall(r"[a-z]+", "".join(c for c in s if not unicodedata.combining(c)).lower())
+    words = re.findall(r"[^\W\d_]+", "".join(c for c in s if not unicodedata.combining(c)).lower())  # any script
     return " ".join([words[0], words[-1]] if len(words) > 2 else words)
 
 

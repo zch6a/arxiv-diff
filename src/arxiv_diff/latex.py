@@ -7,6 +7,7 @@ from __future__ import annotations
 import bisect
 import re
 import unicodedata
+from collections import Counter
 from dataclasses import dataclass, field
 
 from paper_proof.bib import _matching
@@ -21,6 +22,7 @@ class Source:
     starts: list[int] = field(default_factory=list)  # where each piece starts in `text`
     origins: list[tuple[str, int]] = field(default_factory=list)  # (file, offset in that file) of each piece
     files: dict[str, str] = field(default_factory=dict)
+    newlines: dict[str, list[int]] = field(default_factory=dict, repr=False, compare=False)  # per file, built when asked
     macros: dict[str, tuple[int, str]] = field(default_factory=dict)  # the document's own commands: name -> (arguments, body)
 
     def where(self, pos: int) -> tuple[str, int]:
@@ -35,7 +37,13 @@ class Source:
         k = max(0, bisect.bisect_right(self.starts, pos) - 1)
         file, off = self.origins[k]
         local = off + pos - self.starts[k]
-        return file, self.files.get(file, "").count("\n", 0, local) + 1
+        if file not in self.newlines:  # one pass per file, then a binary search per position
+            self.newlines[file] = [i for i, c in enumerate(self.files.get(file, "")) if c == "\n"]
+        return file, bisect.bisect_left(self.newlines[file], local) + 1
+
+
+MAX_USES = 8  # times one file may be \input
+MAX_DOCUMENT = 50_000_000  # characters, all files together
 
 
 def expand(project: Project) -> Source:
@@ -43,6 +51,8 @@ def expand(project: Project) -> Source:
     paper-proof read it: comments and \iffalse blocks removed)."""
     root = project.main.parent
     pieces: list[tuple[str, int, str]] = []
+    uses: Counter[str] = Counter()
+    size = [0]
 
     def visit(rel: str, stack: frozenset[str]) -> None:
         text = project.texts.get(rel, "")
@@ -53,6 +63,11 @@ def expand(project: Project) -> Source:
             sub = p.relative_to(root).as_posix() if p is not None else ""
             if not sub or sub not in project.texts or sub in stack or len(stack) > 20:
                 continue
+            # a file \input many times (each including the next many times) would grow the document exponentially
+            if uses[sub] >= MAX_USES or size[0] + len(project.texts[sub]) > MAX_DOCUMENT:
+                continue
+            uses[sub] += 1
+            size[0] += len(project.texts[sub])
             pieces.append((rel, i, text[i : m.start()]))
             visit(sub, stack | {sub})
             i = m.end()
@@ -74,7 +89,7 @@ def expand(project: Project) -> Source:
 
 # ---------------------------------------------------------------- LaTeX to plain text
 
-INLINE_MATH = re.compile(r"(?<!\\)\$(?:\\.|[^$\\])+\$|\\\((?:.|\n)*?\\\)")
+INLINE_MATH = re.compile(r"(?<!\\)\$(?:\\.|[^$\\]){1,4000}\$|\\\((?:.|\n){0,4000}?\\\)")
 COMMAND = re.compile(r"\\([A-Za-z@]+)\*?|\\(.)", re.S)
 KEEP_ARG = {
     "textbf", "textit", "textsl", "emph", "underline", "texttt", "textsc", "textrm", "textsf", "textmd", "textup", "mbox",
@@ -183,6 +198,8 @@ def macros(text: str) -> dict[str, tuple[int, str]]:
         body = text[m.end() : end].replace("\n", " ")
         if re.search(r"#(?![1-9])", body) or any(int(k) > n for k in re.findall(r"#([1-9])", body)) or len(body) > 300:
             continue
+        if re.search(r"\\" + re.escape(name) + r"(?![A-Za-z@])", body):  # \def\x{\x\x}: TeX itself would loop
+            continue
         out[name] = (n, "\\mathrm{" + body + "}" if m.group(4) else body)
     return out
 
@@ -198,6 +215,7 @@ def expand_macros(s: str, defs: dict[str, tuple[int, str]] | None) -> str:
     """
     if not defs:
         return s
+    limit = 4 * len(s) + 100_000  # commands that call each other must not grow the text without end
     for _ in range(4):  # commands that use commands; never forever
         out, i, changed = [], 0, False
         for m in COMMAND_NAME.finditer(s):
@@ -220,7 +238,10 @@ def expand_macros(s: str, defs: dict[str, tuple[int, str]] | None) -> str:
             i, changed = j, True
         if not changed:
             break
-        s = "".join(out) + s[i:]
+        t = "".join(out) + s[i:]
+        if len(t) > limit:
+            break
+        s = t
     return s
 
 
@@ -276,6 +297,11 @@ def _text(s: str) -> str:
                 out.append(WORDS[name])
                 if s.startswith("{}", j):
                     j += 2
+            elif name in ("input", "include", "subfile", "includeonly"):
+                _, j = _arg(s, j)
+            elif name in ("import", "subimport"):
+                _, j = _arg(s, j)
+                _, j = _arg(s, j)
             elif name in ("rule", "setlength", "addtolength", "setcounter", "addtocounter"):
                 lhs = re.match(r"\s*\\[A-Za-z@]+", s[j:])  # \setlength\tabcolsep{1pt}: a length without braces
                 if lhs and name != "rule":
@@ -317,16 +343,40 @@ def detex(s: str, defs: dict[str, tuple[int, str]] | None = None) -> str:
 # ---------------------------------------------------------------- sentences
 
 DISPLAY = re.compile(
-    r"\\begin\{(equation|align|gather|multline|eqnarray|flalign|alignat|displaymath|math|dmath|IEEEeqnarray)(\*?)\}.*?\\end\{\1\2\}"
-    r"|\\\[.*?\\\]|(?<!\\)\$\$.*?(?<!\\)\$\$",
-    re.S,
+    r"\\begin\{(equation|align|gather|multline|eqnarray|flalign|alignat|displaymath|math|dmath|IEEEeqnarray)(\*?)\}|\\\[|(?<!\\)\$\$"
 )
 # floats and the like: compared on their own (tables, figures) or not prose at all
 BLANKED = re.compile(
     r"\\begin\{(figure|table|wrapfigure|wraptable|SCfigure|algorithm|algorithmic|lstlisting|verbatim|minted|tikzpicture"
-    r"|thebibliography|tabular|tabularx|tabular\*|longtable|filecontents|comment)(\*?)\}.*?\\end\{\1\2\}",
-    re.S,
+    r"|thebibliography|tabular|tabularx|tabular\*|longtable|filecontents|comment)(\*?)\}"
 )
+
+
+def _spans(text: str, opening: re.Pattern[str]) -> list[tuple[int, int]]:
+    r"""Where each environment `opening` finds begins and ends (\begin{x} ... \end{x}, \[ ... \], $$ ... $$),
+    outermost first, in order; one without an end is skipped. The end is looked for with str.find, and once it is
+    known to be missing it is not looked for again: an unclosed environment repeated costs nothing more.
+
+    >>> _spans(r"a \begin{figure}x\begin{tabular}y\end{tabular}\end{figure} b \begin{table} c", BLANKED)
+    [(2, 58)]
+    """
+    out: list[tuple[int, int]] = []
+    missing: dict[str, int] = {}  # closing text -> a position after which it does not occur
+    for m in opening.finditer(text):
+        if out and m.start() < out[-1][1]:
+            continue  # inside the one before
+        tok = m.group(0)
+        close = "\\]" if tok == "\\[" else "$$" if tok == "$$" else "\\end{" + tok[len("\\begin{") :]
+        if close in missing and m.end() >= missing[close]:
+            continue
+        end = text.find(close, m.end())
+        if end < 0:
+            missing[close] = 0
+            continue
+        out.append((m.start(), end + len(close)))
+    return out
+
+
 ABBREV = re.compile(
     r"(?:\b(?:e\.g|i\.e|et al|al|cf|vs|Fig|Figs|fig|figs|Eq|Eqs|eq|eqs|Sec|Secs|sec|Tab|Tabs|Table|Ref|Refs|resp|approx"
     r"|Dr|Prof|Mr|Ms|Mrs|No|no|St|Inc|Ltd|Co|Corp|vol|Vol|pp|ch|Ch|Thm|Def|Prop|Lem|Alg|App|Apx|w\.r\.t|a\.k\.a|viz|ca)"
@@ -352,13 +402,14 @@ def sentences(src: Source, start: int, end: int) -> list[Sentence]:
     """The prose between two positions of the document, sentence by sentence, with each displayed equation a unit of
     its own; floats (figures, tables, algorithms, code) are left out."""
     raw = src.text[start:end]
-    raw = BLANKED.sub(lambda m: blank(m.group(0)), raw)
+    for a, b in _spans(raw, BLANKED):
+        raw = raw[:a] + blank(raw[a:b]) + raw[b:]
     units: list[tuple[int, str, str]] = []  # (offset, kind, latex)
     last = 0
-    for m in DISPLAY.finditer(raw):
-        units.append((last, "text", raw[last : m.start()]))
-        units.append((m.start(), "equation", m.group(0)))
-        last = m.end()
+    for a, b in _spans(raw, DISPLAY):
+        units.append((last, "text", raw[last:a]))
+        units.append((a, "equation", raw[a:b]))
+        last = b
     units.append((last, "text", raw[last:]))
     out: list[Sentence] = []
     for off, kind, text in units:
@@ -396,11 +447,16 @@ def _split_sentences(para: str) -> list[tuple[int, str]]:
     """
     protected = [(m.start(), m.end()) for m in INLINE_MATH.finditer(para)]
     out, last = [], 0
+    k, depth, counted = 0, 0, 0  # the next math span; brace depth up to `counted`
     for m in BOUNDARY.finditer(para):
         cut = m.end()
-        if any(s < m.start() < e for s, e in protected) or para.count("{", 0, m.start()) != para.count("}", 0, m.start()):
+        depth += para.count("{", counted, m.start()) - para.count("}", counted, m.start())
+        counted = m.start()
+        while k < len(protected) and protected[k][1] <= m.start():
+            k += 1
+        if depth != 0 or (k < len(protected) and protected[k][0] < m.start()):
             continue
-        before = para[last : m.start() + 1]
+        before = para[max(last, m.start() - 40) : m.start() + 1]
         if before.endswith(".") and ABBREV.search(before):
             continue
         out.append((last, para[last:cut]))

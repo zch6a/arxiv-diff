@@ -55,3 +55,13 @@ jobs:
           path: examples/v2
           base: HEAD
       - run: test -s "${{ steps.git.outputs.markdown }}"
+      # path naming the main .tex file: the old version is still the whole folder (its .bib, its \input files)
+      - id: tex
+        uses: ./
+        with:
+          path: examples/v2/main.tex
+          base: HEAD
+      - name: The same commit has no changes
+        env:
+          REPORT: ${{ steps.tex.outputs.report }}
+        run: python3 -c "import json, sys; r = json.load(open(sys.argv[1])); assert not r['changed'], r['summary']" "$REPORT"

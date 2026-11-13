@@ -112,7 +112,7 @@ def _about(a: Side, b: Side, records: dict[str, Record]) -> tuple[str, dict[str,
     info: dict[str, Any] = {"arxiv_id": a.arxiv_id, "old_version": a.version, "new_version": b.version}
     if rec:
         info |= {
-            "title": rec.title,
+            "arxiv_title": rec.title,  # "title" is the diff's own (old and new title, when it changed)
             "old_date": dates.get(a.version or 0, ""),
             "new_date": dates.get(b.version or 0, ""),
             "comments": rec.comments,
@@ -178,14 +178,24 @@ def main(argv: list[str] | None = None, client: Client | None = None) -> int:
         if not pairs:
             print(f"arxiv-diff: {sides[0].arxiv_id} has only one version on arXiv: nothing to compare")
             return 0
+        failed: list[str] = []
         with tempfile.TemporaryDirectory(prefix="arxiv-diff-") as tmp:
             cache: dict[tuple[str, int], Paper] = {}
             for a, b in pairs:
                 line, info = _about(a, b, records)
                 where = args.keep or Path(tmp)
-                diffs.append((compare(_load(a, client, where, cache), _load(b, client, where, cache)), line, info))
+                try:
+                    diffs.append((compare(_load(a, client, where, cache), _load(b, client, where, cache)), line, info))
+                except (FetchError, NoSource) as e:
+                    if len(pairs) == 1:
+                        raise
+                    failed.append(f"{a.label()} → {b.label()}: {e}")  # --all: the other steps are still reported
     except (FetchError, NoSource) as e:
         print(f"arxiv-diff: {e}", file=sys.stderr)
+        return 2
+    for message in failed:
+        print(f"arxiv-diff: not compared: {message}", file=sys.stderr)
+    if not diffs:
         return 2
 
     if args.format == "json":
@@ -203,7 +213,9 @@ def main(argv: list[str] | None = None, client: Client | None = None) -> int:
         args.output.write_text(out, encoding="utf-8")
     else:
         sys.stdout.write(out)
-    return 1 if any(_fails(d, args.fail_on) for d, _, _ in diffs) else 0
+    if any(_fails(d, args.fail_on) for d, _, _ in diffs):
+        return 1
+    return 2 if failed else 0
 
 
 if __name__ == "__main__":

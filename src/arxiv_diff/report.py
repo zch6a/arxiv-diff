@@ -216,7 +216,8 @@ def text(d: Diff, color: bool = False, limit: int = 6, about: str = "") -> str:
         out += ["", paint(BOLD, visible(sd.name))]
         out += [f"  {_change_line(c, color)}" for c in sd.changes]
 
-    out += ["", paint(BOLD, "Sections")]
+    if any(sd.status != "same" or sd.moved for sd in d.sections):
+        out += ["", paint(BOLD, "Sections")]
     for sd in d.sections:
         if sd.status == "same" and not sd.moved:
             continue
@@ -265,6 +266,17 @@ def _counts(sd: SectionDiff) -> str:
 
 
 # ---------------------------------------------------------------- Markdown
+
+
+def _html(s: str) -> str:
+    r"""Text inside an HTML element of a Markdown report (<summary>), where Markdown escapes would show as written:
+    HTML escaped, and links and mentions broken as _md breaks them.
+
+    >>> _html("A_b <i>x</i> ~1 @me")
+    'A_b &lt;i&gt;x&lt;/i&gt; ~1 @\u200bme'
+    """
+    s = visible(s).replace("\n", " ").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    return s.replace("://", ":\u200b//").replace("www.", "www\u200b.").replace("@", "@\u200b")
 
 
 def _md_words(c: Change) -> str:
@@ -369,6 +381,8 @@ def markdown(d: Diff, about: str = "", limit: int = 30, budget: int = 60_000) ->
         out += ["", "#### Sections", ""]
         for sd in rest:
             was = f" (was {_md(sd.old.name)})" if sd.renamed and sd.old else ""
+            was_ = f" (was {sd.old.name})" if sd.renamed and sd.old else ""
+            summary = _html(f"{sd.status}: {sd.name}{was_} — {_counts(sd)}")  # Markdown is not read inside <summary>
             title = f"{sd.status}: {_md(sd.name)}{was} — {_md(_counts(sd))}"
             if sd.status in ("added", "removed"):
                 out.append(f"- {title}")
@@ -376,7 +390,7 @@ def markdown(d: Diff, about: str = "", limit: int = 30, budget: int = 60_000) ->
             body = [_md_change(c) for c in sd.changes[:limit]]
             if len(sd.changes) > limit:
                 body.append(f"- … {len(sd.changes) - limit} more")
-            out += ["<details>", f"<summary>{title}</summary>", "", *body, "", "</details>"]
+            out += ["<details>", f"<summary>{summary}</summary>", "", *body, "", "</details>"]
 
     figs = [f for f in d.figures if f.status != "same"]
     if figs:
