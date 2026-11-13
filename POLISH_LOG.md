@@ -275,3 +275,10 @@ Next: five polishing rounds, then v0.1.0.
 5. **Docs**: the CHANGELOG's 0.1.0 section written in full; the README's measurement covers all 55 papers.
 6. **Engineering**: CI green; the social preview left out of the source archive.
 7. **Security and privacy**: unchanged; no network access in the tests, none in the review.
+
+## Released: 0.1.0 (2026-11-13)
+
+https://github.com/zch6a/arxiv-diff/releases/tag/v0.1.0 — the release workflow built and tested the tag (version
+and CHANGELOG checked), made the release with the wheel and the source archive, and moved `v0` to the release
+commit, so `uses: zch6a/arxiv-diff@v0` works. Not published to PyPI (and cannot be as it stands: its dependency,
+paper-proof, is a git reference).
