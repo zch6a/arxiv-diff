@@ -42,6 +42,39 @@ class Source:
         return file, bisect.bisect_left(self.newlines[file], local) + 1
 
 
+ALWAYS_FALSE = re.compile(r"\\iflatexml\b")  # arXiv's HTML conversion: false when the PDF is made
+
+
+def false_branches(text: str) -> str:
+    r"""The text with the branches the PDF never shows blanked out (line breaks kept): \iflatexml ... \else or \fi
+    (the arXiv HTML version's own text; a paper typing its title block twice reads it once).
+
+    >>> false_branches(r"a \iflatexml HTML \ifx x y\fi only \else PDF \fi b")
+    'a                                        PDF \\fi b'
+    """
+    out, i = [], 0
+    for m in ALWAYS_FALSE.finditer(text):
+        if m.start() < i:
+            continue
+        depth, end = 1, len(text)
+        for t in re.finditer(r"\\(if[a-zA-Z@]*|else|fi)\b", text[m.end() :]):
+            word = t.group(1)
+            if word == "fi":
+                depth -= 1
+            elif word == "else" and depth == 1:
+                end = m.end() + t.end()  # the \else branch stays
+                break
+            elif word not in ("else", "ifthenelse", "iftoggle"):
+                depth += 1
+            if depth == 0:
+                end = m.end() + t.end()
+                break
+        out += [text[i : m.start()], re.sub(r"[^\n]", " ", text[m.start() : end])]
+        i = end
+    out.append(text[i:])
+    return "".join(out)
+
+
 MAX_USES = 8  # times one file may be \input
 MAX_DOCUMENT = 50_000_000  # characters, all files together
 
@@ -55,7 +88,7 @@ def expand(project: Project) -> Source:
     size = [0]
 
     def visit(rel: str, stack: frozenset[str]) -> None:
-        text = project.texts.get(rel, "")
+        text = false_branches(project.texts.get(rel, ""))
         i = 0
         for m in INPUT.finditer(text):
             name = m.group(1) or (m.group(2) or "") + "/" + m.group(3)

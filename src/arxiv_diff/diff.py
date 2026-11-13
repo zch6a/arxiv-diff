@@ -812,6 +812,7 @@ class AuthorDiff:
     added: list[str] = field(default_factory=list)
     removed: list[str] = field(default_factory=list)
     reordered: bool = False
+    unread: str = ""  # "old" or "new": that version names no authors the way they are read (\\author and the like)
 
     @property
     def changed(self) -> bool:
@@ -819,6 +820,8 @@ class AuthorDiff:
 
 
 def diff_authors(a: list[str], b: list[str]) -> AuthorDiff:
+    if bool(a) != bool(b):  # names typed into the page without \\author, in one version: not a change of authors
+        return AuthorDiff(a, b, unread="new" if a else "old")
     ka, kb = [_person(n) for n in a], [_person(n) for n in b]
     d = AuthorDiff(a, b, [n for n, k in zip(b, kb, strict=True) if k not in ka], [n for n, k in zip(a, ka, strict=True) if k not in kb])
     common_a = [k for k in ka if k in kb]

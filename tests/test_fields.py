@@ -56,3 +56,18 @@ def test_elsevier_marks_and_initials(tmp_path: Path) -> None:
     pa, pb = load(a), load(b)
     assert pa.authors == ["Piyush Akimitsu", "E. Elmakies", "O. Shildkrot"]
     assert not compare(pa, pb).authors.changed
+
+
+def test_names_typed_without_author_and_the_latexml_branch(tmp_path: Path) -> None:
+    """Economics v2 typed its title block twice (\\iflatexml for arXiv's HTML, \\else for the PDF) and its authors
+    without \\author: the block is read once, and the authors are said to be unread, not removed."""
+    from arxiv_diff.report import text
+
+    block = "\\iflatexml\n{\\large Where Has It Gone?}\\\\ Piyush Akimitsu\n\\else\n{\\large Where Has It Gone?}\\\\ Piyush Akimitsu\n\\fi\n"
+    a = project(tmp_path / "a", {"main.tex": doc("\\section{A}\nText here.\n", "\\author{Piyush Akimitsu}\n")})
+    b = project(tmp_path / "b", {"main.tex": doc(block + "\\section{A}\nText here.\n")})
+    pb = load(b)
+    assert [s.text for s in pb.sections[0].sentences] == ["Where Has It Gone? Piyush Akimitsu"]  # once, not twice
+    d = compare(load(a), pb)
+    assert d.authors.unread == "new" and not d.authors.removed
+    assert "authors: none found in b (written without \\author?), so not compared" in text(d)

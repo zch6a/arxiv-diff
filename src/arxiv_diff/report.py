@@ -214,7 +214,7 @@ def text(d: Diff, color: bool = False, limit: int = 6, about: str = "") -> str:
                     f"  {visible(place)}  {where}  ...{visible(n.before)} {visible(n.old)} → {paint(YELLOW, visible(n.new))} {visible(n.after)}..."
                 )
 
-    if d.title or d.authors.changed:
+    if d.title or d.authors.changed or d.authors.unread:
         out += ["", paint(BOLD, "Title and authors")]
         if d.title:
             out.append(f'  title: "{visible(d.title[0])}" → "{visible(d.title[1])}"')
@@ -224,6 +224,9 @@ def text(d: Diff, color: bool = False, limit: int = 6, about: str = "") -> str:
             out.append("  removed: " + ", ".join(visible(n) for n in d.authors.removed))
         if d.authors.reordered:
             out.append("  order: " + ", ".join(visible(n) for n in d.authors.new))
+        if d.authors.unread:
+            version = visible(d.new if d.authors.unread == "new" else d.old)
+            out.append(f"  authors: none found in {version} (written without \\author?), so not compared")
 
     if d.abstract:
         out += ["", paint(BOLD, "Abstract")]
