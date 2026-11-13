@@ -38,13 +38,21 @@ Tables
 
 Numbers in the text
   Abstract  ms.tex:127  ...art BLEU score of 41.0 → 41.8 after training for 3.5...
+
+Abstract
+  # ms.tex:127  On the WMT 2014 English-to-French translation task, our model establishes a new single-model
+                state-of-the-art BLEU score of [-41.0-] {+41.8+} after training for 3.5 days on eight GPUs, ...
+...
+References
+  + he2016deep  Deep residual learning for image recognition
+  + sukhbaatar2015  End-to-end memory networks
 ```
 
 上面每一处改动都在两个版本的源码里人工核对过：EN-FR 结果改成了 41.8，表 3 里 base 模型的前馈维度从 1024 改成了 2048。
 
 在[示例](examples/)（一篇虚构论文的两个版本）上的彩色输出：
 
-<p align="center"><img src="docs/demo.png" alt="arxiv-diff 在示例论文上的输出：表格结果 31.2 → 30.8（更差）、加粗标记移动、新增一行、正文三处数字变化、新增作者、Limitations 一节和一篇参考文献" width="900"></p>
+<p align="center"><img src="docs/demo.png" alt="arxiv-diff 在示例论文上的输出：表格结果 31.2 → 30.8（更差）、一个值不再加粗、新增一行、正文三处数字变化、新增作者、Limitations 一节和一篇参考文献" width="900"></p>
 
 ## 安装
 
@@ -68,10 +76,10 @@ arxiv-diff paper-v1/ paper-v2/            # 两个 LaTeX 文件夹（或两个�
 |---|---|
 | `--format html -o diff.html` | 一个自包含的网页：两个版本并排，表格在前，可筛选“只看数字变了的句子” |
 | `--format markdown` | 用于 PR 评论或 job summary（论文里的内容不会渲染成链接、图片或 HTML） |
-| `--format json` | 全部内容，两边都带文件和行号 |
-| `--full` | 终端里显示每一个改动的句子（默认每节只显示几条） |
-| `--fail-on results` / `any` | 数字变了 / 任何内容变了时退出码为 1 |
-| `--keep DIR` | 保留从 arXiv 取来的源码（默认用完即删） |
+| `--format json` | 全部内容：每个句子带它所在版本的文件和行号，每个表格单元格带它在新版本里的行号 |
+| `--full` | 显示每一个改动的句子（终端默认每节几条、Markdown 30 条），以及新增和删除章节里的句子 |
+| `--fail-on results` / `any` | 结果变了（表格里的数字变了或被文字取代；句子里的数字变了）/ 任何内容变了时退出码为 1 |
+| `--keep DIR` | 保留从 arXiv 取来并解压的源码（`.tex`、`.bib`、`.bbl`、`.sty`、`.cls`、`.bst`；默认用完即删） |
 
 退出码：比较完成为 0；`--fail-on` 条件满足为 1；无法比较为 2（arXiv 上没有该版本、某版本只有 PDF、文件夹里没有 LaTeX 文档）。
 
@@ -128,7 +136,7 @@ jobs:
 
 ## 局限
 
-- 比较的是 LaTeX。只在图片里变了的数字，或只提交了 PDF 的版本，看不到。带参数的宏按原文比较。
+- 比较的是 LaTeX。只在图片里变了的数字，或只提交了 PDF 的版本，看不到。论文自定义的命令会展开，但带可选参数的命令和带参数的 `\def` 按原文比较。
 - 表格由 paper-proof 的解析器读取（`tabular`、`tabularx`、`longtable`、`\multicolumn`、`\multirow`、booktabs）；用别的方式画的表格按文字比较，或比较不到。
 - 改得面目全非的句子显示为一删一增。
 

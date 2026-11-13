@@ -20,7 +20,7 @@ Use `arxiv-diff` instead of the `uvx ...` prefix if it is installed. Useful opti
 - `--all`: every version against the next (v1 → v2 → … → latest).
 - `--format html -o diff.html`: one self-contained page with the two versions side by side; tell the user where it
   is. `--format json` for everything, with file and line; `--format markdown` for a comment.
-- `--full`: every changed sentence in the terminal report (it shows a few per section otherwise).
+- `--full`: every changed sentence (the terminal report shows a few per section otherwise).
 
 For a paper in a git repository, put the old version in a folder first (`git worktree add /tmp/old <ref>`, or
 `git archive <ref> -- paper | tar -x -C /tmp/old`) and compare the two folders.
@@ -31,9 +31,9 @@ For a paper in a git repository, put the old version in a folder first (`git wor
   metric says which way is better, "better" or "worse". These are what readers most need to know about; say them
   first, with the table's label.
 - **Numbers in the text**: numbers that changed inside sentences (the abstract's claims especially).
-- Then the abstract and conclusion, sections (renamed, added, removed; `#` marks a sentence where only numbers
-  changed), figures (the image files and captions), authors, and references (added, removed, or now cited as the
-  published version).
+- Then the title and authors, the abstract and conclusion, sections (renamed, added, removed, moved; `#` marks a
+  sentence where only numbers changed), figures (the image files and captions), and references (added, removed, or
+  now cited as the published version).
 
 Sentences are compared as plain text (formatting dropped, citations as `[keys]`, references as `(labels)`), so a
 change in formatting alone is not reported. Image contents are not compared, only which files a figure shows.

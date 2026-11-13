@@ -149,7 +149,27 @@ def _fails(d: Diff, fail_on: str) -> bool:
     return False
 
 
+def _write(output: Path | None, text: str) -> None:
+    if output is None:
+        sys.stdout.write(text)
+        return
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(text, encoding="utf-8")
+
+
 def main(argv: list[str] | None = None, client: Client | None = None) -> int:
+    """The command line. Exit status: 0 compared, 1 when --fail-on says so, 2 when it could not compare (and on any
+    unexpected error, which must not read as "results changed")."""
+    try:
+        return _main(argv, client)
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except Exception as e:  # noqa: BLE001 - the last line of defence for the exit status
+        print(f"arxiv-diff: {e.__class__.__name__}: {e}", file=sys.stderr)
+        return 2
+
+
+def _main(argv: list[str] | None, client: Client | None) -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(prog="arxiv-diff", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -176,7 +196,9 @@ def main(argv: list[str] | None = None, client: Client | None = None) -> int:
         except UsageError as e:
             ap.error(str(e))
         if not pairs:
-            print(f"arxiv-diff: {sides[0].arxiv_id} has only one version on arXiv: nothing to compare")
+            print(f"arxiv-diff: {sides[0].arxiv_id} has only one version on arXiv: nothing to compare", file=sys.stderr)
+            if args.format == "json":  # a JSON reader still gets JSON: no comparisons
+                _write(args.output, "[]\n")
             return 0
         failed: list[str] = []
         with tempfile.TemporaryDirectory(prefix="arxiv-diff-") as tmp:
@@ -200,7 +222,7 @@ def main(argv: list[str] | None = None, client: Client | None = None) -> int:
 
     if args.format == "json":
         payload: Any = [to_json(d, info) for d, _, info in diffs]
-        out = json.dumps(payload[0] if len(payload) == 1 else payload, indent=2, ensure_ascii=False) + "\n"
+        out = json.dumps(payload if args.all else payload[0], indent=2, ensure_ascii=False) + "\n"  # --all: always a list
     elif args.format == "html":
         out = html.page([(d, line) for d, line, _ in diffs])
     elif args.format == "markdown":
@@ -208,11 +230,7 @@ def main(argv: list[str] | None = None, client: Client | None = None) -> int:
     else:
         color = args.output is None and use_color(sys.stdout, args.color)
         out = "\n".join(report.text(d, color, 0 if args.full else 6, line) for d, line, _ in diffs)
-    if args.output:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(out, encoding="utf-8")
-    else:
-        sys.stdout.write(out)
+    _write(args.output, out)
     if any(_fails(d, args.fail_on) for d, _, _ in diffs):
         return 1
     return 2 if failed else 0

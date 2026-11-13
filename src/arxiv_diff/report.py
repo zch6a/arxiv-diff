@@ -7,7 +7,7 @@ import re
 
 from paper_proof.report import _code, _md, visible
 
-from .diff import CellChange, Change, Diff, SectionDiff
+from .diff import CellChange, Change, Diff, SectionDiff, word_diff
 
 CONCLUSION = re.compile(r"conclu|summary|discussion|limitation|future work|outlook", re.I)
 RED, GREEN, YELLOW, DIM, BOLD, RESET = "\x1b[31m", "\x1b[32m", "\x1b[33m", "\x1b[2m", "\x1b[1m", "\x1b[0m"
@@ -54,6 +54,11 @@ def _grouped(cells: list[CellChange]) -> tuple[dict[tuple[str, str], list[str]],
     return emptied, filled
 
 
+def _some(items: list[str], n: int = 12) -> str:
+    """The first n items, and how many there are when that is not all."""
+    return "; ".join(visible(k) for k in items[:n]) + (f"; ... ({len(items)} in all)" if len(items) > n else "")
+
+
 def _rows(rows: list[str], n: int = 6) -> str:
     return "; ".join(visible(r) for r in rows[:n]) + (f"; ... ({len(rows)})" if len(rows) > n else "")
 
@@ -72,6 +77,8 @@ def headline(d: Diff) -> list[str]:
     if s.text_numbers_changed:
         parts.append(f"{_plural(s.text_numbers_changed, 'number')} changed in the text")
     for n, what in (
+        (s.table_rows_added, "table row added"),
+        (s.table_rows_removed, "table row removed"),
         (s.sections_added, "section added"),
         (s.sections_removed, "section removed"),
         (s.sections_renamed, "section renamed"),
@@ -87,8 +94,11 @@ def headline(d: Diff) -> list[str]:
         (s.authors_removed, "author removed"),
     ):
         if n:
-            noun, verb = what.split(" ", 1)
-            parts.append(f"{_plural(n, noun)} {verb}")
+            *noun, verb = what.split(" ")  # "table row added" -> "2 table rows added"
+            parts.append(f"{n} {' '.join([*noun[:-1], noun[-1] + ('' if n == 1 else 's')])} {verb}")
+    moved = sum(sd.moved for sd in d.sections)
+    if moved:
+        parts.append(f"{_plural(moved, 'section')} moved")
     if d.authors.reordered:
         parts.append("author order changed")
     if d.title:
@@ -120,20 +130,25 @@ def _words(c: Change, color: bool) -> str:
     return "".join(out)
 
 
+def _at(s: object) -> str:
+    """file:line, with any control characters in the file name made visible."""
+    return visible(f"{s.file}:{s.line}")  # type: ignore[attr-defined]
+
+
 def _change_line(c: Change, color: bool) -> str:
     paint = (lambda code, s: f"{code}{s}{RESET}") if color else (lambda code, s: s)
     if c.kind == "changed" and c.new is not None:
         mark = "#" if c.numbers_only else "~"
-        return f"{paint(YELLOW, mark)} {paint(DIM, f'{c.new.file}:{c.new.line}')}  {_words(c, color)}"
+        return f"{paint(YELLOW, mark)} {paint(DIM, _at(c.new))}  {_words(c, color)}"
     if c.kind == "added" and c.new is not None:
-        return f"{paint(GREEN, '+')} {paint(DIM, f'{c.new.file}:{c.new.line}')}  {paint(GREEN, visible(c.new.text))}"
+        return f"{paint(GREEN, '+')} {paint(DIM, _at(c.new))}  {paint(GREEN, visible(c.new.text))}"
     if c.kind == "removed" and c.old is not None:
-        return f"{paint(RED, '-')} {paint(DIM, f'{c.old.file}:{c.old.line}')}  {paint(RED, visible(c.old.text))}"
+        return f"{paint(RED, '-')} {paint(DIM, _at(c.old))}  {paint(RED, visible(c.old.text))}"
     s = c.new or c.old
     assert s is not None
     where = "from" if c.new is not None else "to"
     moved = f"(moved {where} {visible(c.other)})"
-    return f"{paint(DIM, '>')} {paint(DIM, f'{s.file}:{s.line}')}  {paint(DIM, visible(s.text[:80]))} {paint(DIM, moved)}"
+    return f"{paint(DIM, '>')} {paint(DIM, _at(s))}  {paint(DIM, visible(s.text[:80]))} {paint(DIM, moved)}"
 
 
 def text(d: Diff, color: bool = False, limit: int = 6, about: str = "") -> str:
@@ -151,7 +166,7 @@ def text(d: Diff, color: bool = False, limit: int = 6, about: str = "") -> str:
         out += ["", paint(BOLD, "Tables")]
         for t in changed_tables:
             w = t.new or t.old
-            where = f"{w.file}:{w.line}" if w else ""
+            where = visible(f"{w.file}:{w.line}") if w else ""
             out.append(f"  {t.status:8} {visible(t.name)}  {paint(DIM, where)}")
             emptied, filled = _grouped(t.cells)
             for c in t.cells:
@@ -170,10 +185,13 @@ def text(d: Diff, color: bool = False, limit: int = 6, about: str = "") -> str:
                 out.append(f"      {visible(column)}: {_plural(len(rows_), 'cell')} emptied (was {visible(value)}): {_rows(rows_)}")
             for (column, value), rows_ in filled.items():
                 out.append(f"      {visible(column)}: {_plural(len(rows_), 'cell')} filled in ({visible(value)}): {_rows(rows_)}")
+            if t.columns_moved:
+                moved_ = "; ".join(f"{o} → {n}" for o, n in t.columns_moved)
+                out.append(f"      numbers now under another header: {visible(moved_)} (headers corrected? the changes above may be relabelling)")
             if t.columns_renamed and t.status == "changed":
-                out.append("      columns renamed: " + "; ".join(f"{visible(o)} → {visible(n)}" for o, n in t.columns_renamed[:12]))
+                out.append("      columns renamed: " + _some([f"{o} → {n}" for o, n in t.columns_renamed]))
             if t.rows_renamed and t.status == "changed":
-                out.append("      rows renamed: " + "; ".join(f"{visible(o)} → {visible(n)}" for o, n in t.rows_renamed[:12]))
+                out.append("      rows renamed: " + _some([f"{o} → {n}" for o, n in t.rows_renamed]))
             for what, keys in (
                 ("rows added", t.rows_added),
                 ("rows removed", t.rows_removed),
@@ -181,16 +199,16 @@ def text(d: Diff, color: bool = False, limit: int = 6, about: str = "") -> str:
                 ("columns removed", t.columns_removed),
             ):
                 if keys and t.status == "changed":
-                    out.append(f"      {what}: " + "; ".join(visible(k) for k in keys[:12]) + (f"; ... ({len(keys)})" if len(keys) > 12 else ""))
+                    out.append(f"      {what}: " + _some(keys))
             if t.caption:
-                out.append(f"      caption: {visible(t.caption[0][:70])!r} → {visible(t.caption[1][:70])!r}")
+                out.append("      caption: " + _words(Change("changed", words=word_diff(*t.caption)), color))
 
     numbers = [("Abstract", ch) for ch in d.abstract if ch.numbers] + [(sd.name, ch) for sd in d.sections for ch in sd.changes if ch.numbers]
     if numbers:
         out += ["", paint(BOLD, "Numbers in the text")]
         for place, ch in numbers:
             assert ch.new is not None
-            where = paint(DIM, f"{ch.new.file}:{ch.new.line}")
+            where = paint(DIM, _at(ch.new))
             for n in ch.numbers:
                 out.append(
                     f"  {visible(place)}  {where}  ...{visible(n.before)} {visible(n.old)} → {paint(YELLOW, visible(n.new))} {visible(n.after)}..."
@@ -199,7 +217,7 @@ def text(d: Diff, color: bool = False, limit: int = 6, about: str = "") -> str:
     if d.title or d.authors.changed:
         out += ["", paint(BOLD, "Title and authors")]
         if d.title:
-            out.append(f"  title: {visible(d.title[0])!r} → {visible(d.title[1])!r}")
+            out.append(f'  title: "{visible(d.title[0])}" → "{visible(d.title[1])}"')
         if d.authors.added:
             out.append("  added: " + ", ".join(visible(n) for n in d.authors.added))
         if d.authors.removed:
@@ -228,8 +246,8 @@ def text(d: Diff, color: bool = False, limit: int = 6, about: str = "") -> str:
         moved = " (moved)" if sd.moved else ""
         indent = "  " * max(0, sd.level - 1)
         out.append(f"  {indent}{paint(tone, mark)} {visible(sd.name)}{was}{moved}  {paint(DIM, counts)}")
-        if is_conclusion(sd) or sd.status in ("added", "removed"):
-            continue  # shown above, or all of it is new or gone
+        if is_conclusion(sd) or (sd.status in ("added", "removed") and limit > 0):
+            continue  # shown above; or all of it is new or gone (--full shows it)
         shown = sd.changes if limit <= 0 else sd.changes[:limit]
         out += [f"  {indent}    {_change_line(c, color)}" for c in shown]
         if len(sd.changes) > len(shown):
@@ -241,7 +259,7 @@ def text(d: Diff, color: bool = False, limit: int = 6, about: str = "") -> str:
         for f in changed_figs:
             line = f"  {f.status:8} {visible(f.name)}"
             if f.graphics:
-                line += f"  graphics {', '.join(f.graphics[0]) or '-'} → {', '.join(f.graphics[1]) or '-'}"
+                line += f"  graphics {visible(', '.join(f.graphics[0]) or '-')} → {visible(', '.join(f.graphics[1]) or '-')}"
             if f.caption:
                 line += "  caption: " + _words(Change("changed", words=f.caption), color)
             out.append(line)
@@ -300,7 +318,8 @@ def _md_words(c: Change) -> str:
 
 def _md_change(c: Change) -> str:
     if c.kind == "changed" and c.new is not None:
-        return f"- {'#' if c.numbers_only else '~'} {_md_words(c)} <sub>{_code(f'{c.new.file}:{c.new.line}')}</sub>"
+        mark = "**\\#**" if c.numbers_only else "\\~"  # "- # ..." would be a heading
+        return f"- {mark} {_md_words(c)} <sub>{_code(f'{c.new.file}:{c.new.line}')}</sub>"
     if c.kind == "added" and c.new is not None:
         return f"- **+** {_md(c.new.text)} <sub>{_code(f'{c.new.file}:{c.new.line}')}</sub>"
     if c.kind == "removed" and c.old is not None:
@@ -330,6 +349,7 @@ def markdown(d: Diff, about: str = "", limit: int = 30, budget: int = 60_000) ->
         or t.rows_renamed
         or t.columns_renamed
         or t.caption
+        or t.columns_moved
     ]
     if value_changes or structure:
         out += ["", "#### Tables", ""]
@@ -351,14 +371,32 @@ def markdown(d: Diff, about: str = "", limit: int = 30, budget: int = 60_000) ->
         if t.status != "changed":
             out.append(f"- table {_md(t.name)}: {t.status}")
             continue
-        bits = [f"{len(t.rows_added)} rows added"] if t.rows_added else []
-        bits += [f"{len(t.rows_removed)} rows removed"] if t.rows_removed else []
+        bits = (
+            [f"rows added: {', '.join(t.rows_added[:10])}" + (f" … ({len(t.rows_added)})" if len(t.rows_added) > 10 else "")] if t.rows_added else []
+        )
+        bits += (
+            [f"rows removed: {', '.join(t.rows_removed[:10])}" + (f" … ({len(t.rows_removed)})" if len(t.rows_removed) > 10 else "")]
+            if t.rows_removed
+            else []
+        )
         bits += [f"{len(t.rows_renamed)} rows renamed"] if t.rows_renamed else []
         bits += [f"columns added: {', '.join(t.columns_added)}"] if t.columns_added else []
         bits += [f"columns removed: {', '.join(t.columns_removed)}"] if t.columns_removed else []
         bits += ["columns renamed: " + ", ".join(f"{o} → {n}" for o, n in t.columns_renamed)] if t.columns_renamed else []
         bits += ["caption changed"] if t.caption else []
+        bits += (
+            ["numbers now under another header: " + ", ".join(f"{o} → {n}" for o, n in t.columns_moved) + " (headers corrected?)"]
+            if t.columns_moved
+            else []
+        )
         out.append(f"- table {_md(t.name)}: {_md('; '.join(bits))}")
+
+    numbers = [("Abstract", ch) for ch in d.abstract if ch.numbers] + [(sd.name, ch) for sd in d.sections for ch in sd.changes if ch.numbers]
+    if numbers:
+        out += ["", "#### Numbers in the text", ""]
+        for place, ch in numbers:
+            for n in ch.numbers:
+                out.append(f"- {_md(place)}: …{_md(n.before)} ~~{_md(n.old)}~~ **{_md(n.new)}** {_md(n.after)}…")
 
     if d.title or d.authors.changed:
         out += ["", "#### Title and authors", ""]
@@ -375,16 +413,19 @@ def markdown(d: Diff, about: str = "", limit: int = 30, budget: int = 60_000) ->
     for sd in d.sections:
         if is_conclusion(sd) and sd.status != "same":
             out += ["", f"#### {_md(sd.name)}", "", *[_md_change(c) for c in sd.changes[:limit]]]
+            if len(sd.changes) > limit:
+                out.append(f"- … {len(sd.changes) - limit} more")
 
-    rest = [sd for sd in d.sections if sd.status != "same" and not is_conclusion(sd)]
+    rest = [sd for sd in d.sections if (sd.status != "same" or sd.moved) and not is_conclusion(sd)]
     if rest:
         out += ["", "#### Sections", ""]
         for sd in rest:
             was = f" (was {_md(sd.old.name)})" if sd.renamed and sd.old else ""
             was_ = f" (was {sd.old.name})" if sd.renamed and sd.old else ""
-            summary = _html(f"{sd.status}: {sd.name}{was_} — {_counts(sd)}")  # Markdown is not read inside <summary>
-            title = f"{sd.status}: {_md(sd.name)}{was} — {_md(_counts(sd))}"
-            if sd.status in ("added", "removed"):
+            status = "moved" if sd.status == "same" else sd.status + (", moved" if sd.moved else "")
+            summary = _html(f"{status}: {sd.name}{was_} — {_counts(sd)}")  # Markdown is not read inside <summary>
+            title = f"{status}: {_md(sd.name)}{was} — {_md(_counts(sd))}"
+            if sd.status in ("added", "removed") or not sd.changes:
                 out.append(f"- {title}")
                 continue
             body = [_md_change(c) for c in sd.changes[:limit]]

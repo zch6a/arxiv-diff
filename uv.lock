@@ -22,7 +22,7 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "paper-proof", git = "https://github.com/zch6a/paper-proof?rev=v0.1.0" }]
+requires-dist = [{ name = "paper-proof", git = "https://github.com/zch6a/paper-proof?rev=2648f26cdbde0338f6a34710c7f3a94df11995aa" }]
 
 [package.metadata.requires-dev]
 dev = [
@@ -343,7 +343,7 @@ wheels = [
 [[package]]
 name = "paper-proof"
 version = "0.1.0"
-source = { git = "https://github.com/zch6a/paper-proof?rev=v0.1.0#2648f26cdbde0338f6a34710c7f3a94df11995aa" }
+source = { git = "https://github.com/zch6a/paper-proof?rev=2648f26cdbde0338f6a34710c7f3a94df11995aa#2648f26cdbde0338f6a34710c7f3a94df11995aa" }
 dependencies = [
     { name = "pypdf" },
 ]

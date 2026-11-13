@@ -584,6 +584,7 @@ OUT_OF_NAMES = re.compile(
 # what separates one author from the next (or a name from what follows it)
 NAME_SEPARATOR = re.compile(
     r"\\(?:quad|qquad|enspace|hfill|newline|And|AND|and)\b|\\hspace\*?\{[^}]*\}|\\hskip\s*[\d.]+\w*|\\\\(?:\[[^\]]*\])?|~{2,}|&|,|;"
+    r"|(?:\\\s+){2,}"
     r"|\band\b|\n\s*\n"
 )
 
@@ -613,6 +614,8 @@ def authors(src: Source) -> list[str]:
         if end < 0:
             continue
         block = expand_macros(src.text[m.end() : end], src.macros)  # \authorskip and such
+        # \texttt{...} holds addresses, or (some templates) the names themselves
+        block = re.sub(r"\\(?:texttt|tt)\s*\{([^{}]*)\}", lambda m: " " if "@" in m.group(1) else m.group(1), block)
         block = OUT_OF_NAMES.sub(" ", block)
         block = re.sub(r"\$[^$]*\$|\\textsuperscript\{[^}]*\}|\^\{?[^}\s]*\}?|\\vspace\*?\{[^}]*\}", " ", block)
         for group in re.split(r"\\(?:and|And|AND)\b", block):

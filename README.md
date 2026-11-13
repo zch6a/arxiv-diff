@@ -57,7 +57,7 @@ model's feed-forward size in Table 3 from 1024 to 2048.
 
 The same on [the example](examples/) (a made-up paper in two versions), in colour:
 
-<p align="center"><img src="docs/demo.png" alt="arxiv-diff's output on the example paper: a table result 31.2 → 30.8 (worse), the bold marker moved, a row added, three numbers changed in the text, an author, a Limitations section and a reference added" width="900"></p>
+<p align="center"><img src="docs/demo.png" alt="arxiv-diff's output on the example paper: a table result 31.2 → 30.8 (worse), a value no longer in bold, a row added, three numbers changed in the text, an author, a Limitations section and a reference added" width="900"></p>
 
 ## Install
 
@@ -81,10 +81,10 @@ arxiv-diff paper-v1/ paper-v2/            # two LaTeX folders (or two main .tex 
 |---|---|
 | `--format html -o diff.html` | one self-contained page: the two versions side by side, tables first, filters for "only sentences whose numbers changed" |
 | `--format markdown` | for a pull request comment or a job summary (nothing from the paper renders as a link, image or HTML) |
-| `--format json` | everything, with file and line on both sides |
-| `--full` | every changed sentence in the terminal (a few per section otherwise) |
-| `--fail-on results` / `any` | exit with 1 when a number changed / anything changed |
-| `--keep DIR` | keep the arXiv sources it fetched (otherwise deleted) |
+| `--format json` | everything: each sentence with its file and line in its version, each table cell with its line in the new version |
+| `--full` | every changed sentence (the terminal shows a few per section, Markdown 30), and the sentences of added and removed sections |
+| `--fail-on results` / `any` | exit with 1 when a result changed (a number in a table, or replaced by text; a number in a sentence) / when anything changed |
+| `--keep DIR` | keep the arXiv sources it fetched, as unpacked (the `.tex`, `.bib`, `.bbl`, `.sty`, `.cls`, `.bst` files; otherwise deleted) |
 
 It exits with 0 when the comparison is done, 1 when `--fail-on` says so, and 2 when it could not compare (a version
 arXiv does not have, a PDF-only version, a folder without a LaTeX document).
@@ -153,7 +153,8 @@ wrapped over two lines.
 ## Limits
 
 - It compares the LaTeX. A number that changed only inside a figure's image, or a version submitted as a PDF only,
-  is not seen. Macros with arguments are compared as written.
+  is not seen. The paper's own commands are expanded, except those with an optional argument and `\def` with parameters,
+  which are compared as written.
 - Tables are read by paper-proof's parser (`tabular`, `tabularx`, `longtable`, `\multicolumn`, `\multirow`,
   booktabs); a table drawn some other way is compared as text, or not at all.
 - A sentence rewritten beyond recognition shows as one removed and one added.

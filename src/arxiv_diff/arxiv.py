@@ -2,7 +2,7 @@
 
 The list of versions (with their dates) comes from arXiv's OAI-PMH service, each version's source from
 arxiv.org/e-print/<id>v<n>. arXiv asks for at most one request every three seconds: requests are paced so. Sources
-are unpacked into a temporary folder that the caller deletes; only .tex, .bib, .bbl, .sty and .cls files are kept
+are unpacked into a temporary folder that the caller deletes; only .tex, .bib, .bbl, .sty, .cls and .bst files are kept
 (paper-proof's safe extraction: no absolute paths, no `..`, a size limit).
 """
 

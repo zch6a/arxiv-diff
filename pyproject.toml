@@ -18,7 +18,7 @@ classifiers = [
 # paper-proof reads each version's LaTeX project (\input, comments, \iffalse) and its tables, and fetches arXiv sources
 # safely.
 dependencies = [
-    "paper-proof @ git+https://github.com/zch6a/paper-proof@v0.1.0",
+    "paper-proof @ git+https://github.com/zch6a/paper-proof@2648f26cdbde0338f6a34710c7f3a94df11995aa",  # v0.1.0, by commit: a tag can move
 ]
 
 [project.urls]

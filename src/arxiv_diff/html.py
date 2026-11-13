@@ -4,12 +4,14 @@ loading anything, so a paper cannot make the page do more than show its words.""
 
 from __future__ import annotations
 
+import base64
+import hashlib
 from html import escape
 
 from . import __version__
 from .diff import Change, Diff, SectionDiff, word_diff
 from .latex import Sentence
-from .report import _grouped, delta, headline, is_conclusion, verdict
+from .report import _grouped, _plural, delta, headline, is_conclusion, verdict
 
 CSS = """
 :root { --bg: #fbfbfa; --fg: #1d1d1f; --muted: #6b6b70; --line: #e3e3e0; --card: #ffffff;
@@ -46,7 +48,7 @@ ins { background: var(--ins); color: var(--ins-fg); text-decoration: none; borde
 .gone { color: var(--del-fg); } .new { color: var(--ins-fg); } .moved { color: var(--muted); font-style: italic; }
 .gap { color: var(--muted); font-size: 13px; padding: 4px 12px; border-top: 1px dashed var(--line); }
 ul.plain { padding-left: 18px; } footer { color: var(--muted); font-size: 12px; margin-top: 48px; }
-body.numbers-only .pair:not(.numbers), body.numbers-only .gap { display: none; }
+body.numbers-only .pair:not(.numbers):not(.caption), body.numbers-only .gap, body.numbers-only details.no-numbers { display: none; }
 body.hide-moved .pair.is-moved { display: none; }
 @media (max-width: 720px) { .pair { grid-template-columns: 1fr; } .pair > div + div { border-left: 0; border-top: 1px dashed var(--line); } }
 """
@@ -55,12 +57,20 @@ SCRIPT = """
 for (const box of document.querySelectorAll('input[data-class]')) {
   box.addEventListener('change', () => document.body.classList.toggle(box.dataset.class, box.checked));
 }
-document.getElementById('open-all').addEventListener('click', (e) => {
-  e.preventDefault(); const open = e.target.dataset.open !== '1';
-  for (const d of document.querySelectorAll('details.sec')) d.open = open;
-  e.target.dataset.open = open ? '1' : ''; e.target.textContent = open ? 'fold all' : 'unfold all';
+const link = document.getElementById('open-all');
+const sections = () => [...document.querySelectorAll('details.sec')];
+const label = () => { link.textContent = sections().every((d) => d.open) ? 'fold all' : 'unfold all'; };
+link.addEventListener('click', (e) => {
+  e.preventDefault(); const open = !sections().every((d) => d.open);
+  for (const d of sections()) d.open = open;
+  label();
 });
+for (const d of sections()) d.addEventListener('toggle', label);
+label();
 """
+
+
+SCRIPT_HASH = "sha256-" + base64.b64encode(hashlib.sha256(SCRIPT.encode()).digest()).decode()
 
 
 def _e(s: str) -> str:
@@ -115,19 +125,21 @@ def _pair(c: Change) -> str:
 def _section(sd: SectionDiff, open_: bool, name: str = "") -> str:
     kinds = [c.kind for c in sd.changes]
     if sd.status in ("added", "removed"):
-        count = f"{len(kinds)} sentences"
+        count = _plural(len(kinds), "sentence")
     else:
         count = f"+{kinds.count('added')} −{kinds.count('removed')} ~{kinds.count('changed')}"
         if sd.unchanged:
             count += f" · {sd.unchanged} unchanged"
     was = f' <span class="count">was {_e(sd.old.name)}</span>' if sd.renamed and sd.old else ""
     moved = ' <span class="count">moved</span>' if sd.moved else ""
-    tag = f'<span class="tag {sd.status}">{sd.status}</span>'
+    status = "moved" if sd.status == "same" and sd.moved else sd.status
+    tag = f'<span class="tag {sd.status}">{status}</span>'
+    classes = "sec" if any(c.numbers for c in sd.changes) else "sec no-numbers"
     body = "".join(_pair(c) for c in sd.changes)
     if sd.unchanged and sd.status == "changed":
-        body += f'<div class="gap">{sd.unchanged} sentences unchanged</div>'
+        body += f'<div class="gap">{_plural(sd.unchanged, "sentence")} unchanged</div>'
     return (
-        f'<details class="sec"{" open" if open_ else ""}><summary>{tag}<h3>{_e(name or sd.name)}</h3>{was}{moved}'
+        f'<details class="{classes}"{" open" if open_ else ""}><summary>{tag}<h3>{_e(name or sd.name)}</h3>{was}{moved}'
         f'<span class="count">{count}</span></summary>{body}</details>'
     )
 
@@ -162,6 +174,9 @@ def _tables(d: Diff) -> str:
         emptied, filled = _grouped(t.cells)
         notes += [f"{_e(col)}: {len(r)} cells emptied (were {_e(v)}): {_e('; '.join(r))}" for (col, v), r in emptied.items()]
         notes += [f"{_e(col)}: {len(r)} cells filled in ({_e(v)}): {_e('; '.join(r))}" for (col, v), r in filled.items()]
+        if t.columns_moved:
+            moved_ = "; ".join(f"{o} → {n}" for o, n in t.columns_moved)
+            notes.append(f"numbers now under another header: {_e(moved_)} (headers corrected? the changes above may be relabelling)")
         if t.status == "changed" and t.columns_renamed:
             notes.append("columns renamed: " + _e("; ".join(f"{o} → {n}" for o, n in t.columns_renamed)))
         if t.status == "changed" and t.rows_renamed:
@@ -177,7 +192,7 @@ def _tables(d: Diff) -> str:
                     notes.append(f"{what}: {_e('; '.join(keys))}")
         if t.caption:
             old, new = _words(word_diff(*t.caption))
-            notes.append(f"caption:<div class='pair'><div>{old}</div><div>{new}</div></div>")
+            notes.append(f"caption:<div class='pair caption'><div>{old}</div><div>{new}</div></div>")
         if notes:
             out.append('<ul class="plain">' + "".join(f"<li>{n}</li>" for n in notes) + "</ul>")
     return "".join(out)
@@ -194,6 +209,13 @@ def _one(d: Diff, about: str, anchor: str) -> str:
     tables = _tables(d)
     if tables:
         out.append(f'<h2 id="{anchor}-tables">Tables</h2>{tables}')
+    numbers = [("Abstract", ch) for ch in d.abstract if ch.numbers] + [(sd.name, ch) for sd in d.sections for ch in sd.changes if ch.numbers]
+    if numbers:
+        out.append(f'<h2 id="{anchor}-numbers">Numbers in the text</h2><ul class="plain">')
+        for place, ch in numbers:
+            for n in ch.numbers:
+                out.append(f"<li>{_e(place)} {_where(ch.new)}…{_e(n.before)} <del>{_e(n.old)}</del> <ins>{_e(n.new)}</ins> {_e(n.after)}…</li>")
+        out.append("</ul>")
     if d.title or d.authors.changed:
         out.append(f'<h2 id="{anchor}-front">Title and authors</h2><ul class="plain">')
         if d.title:
@@ -208,7 +230,7 @@ def _one(d: Diff, about: str, anchor: str) -> str:
     if d.abstract:
         abstract = SectionDiff("changed", None, None, 1, d.abstract)
         out.append(f'<h2 id="{anchor}-abstract">Abstract</h2>' + _section(abstract, True, "Abstract"))
-    changed = [sd for sd in d.sections if sd.status != "same"]
+    changed = [sd for sd in d.sections if sd.status != "same" or sd.moved]
     if changed:
         out.append(f'<h2 id="{anchor}-sections">Sections</h2>')
         out += [_section(sd, is_conclusion(sd) or len(changed) <= 6) for sd in changed]
@@ -221,7 +243,7 @@ def _one(d: Diff, about: str, anchor: str) -> str:
                 line += f" — graphics <del>{_e(', '.join(f.graphics[0]) or '-')}</del> → <ins>{_e(', '.join(f.graphics[1]) or '-')}</ins>"
             if f.caption:
                 old, new = _words(f.caption)
-                line += f"<div class='pair'><div>{old}</div><div>{new}</div></div>"
+                line += f"<div class='pair caption'><div>{old}</div><div>{new}</div></div>"
             out.append(f"<li>{line}</li>")
         out.append("</ul>")
     r = d.references
@@ -235,27 +257,30 @@ def _one(d: Diff, about: str, anchor: str) -> str:
     return "".join(out)
 
 
+SECTIONS = (("tables", "tables"), ("numbers", "numbers"), ("front", "title and authors"), ("abstract", "abstract"),
+            ("sections", "sections"), ("figures", "figures"), ("references", "references"))  # fmt: skip
+
+
 def page(diffs: list[tuple[Diff, str]], title: str = "") -> str:
     """The page for one comparison, or for several (each step of a paper's versions) one after another."""
+    if not title and len(diffs) > 1:
+        first, last = diffs[0][0], diffs[-1][0]
+        title = f"arxiv-diff: {first.old} → {last.new}, {len(diffs)} steps"
     title = title or (diffs[0][1] if diffs and diffs[0][1] else "arxiv-diff")
     parts = [_one(d, about, f"d{k}") for k, (d, about) in enumerate(diffs)]
     links = []
     if len(diffs) > 1:
         links = [f'<a href="#d{k}">{_e(d.old)} → {_e(d.new)}</a>' for k, (d, _) in enumerate(diffs)]
     else:
-        links = (
-            [f'<a href="#d0-{s}">{s}</a>' for s in ("tables", "abstract", "sections", "figures", "references") if f'id="d0-{s}"' in parts[0]]
-            if parts
-            else []
-        )
+        links = [f'<a href="#d0-{s}">{label}</a>' for s, label in SECTIONS if f'id="d0-{s}"' in parts[0]] if parts else []
     nav = (
         "<nav>" + "".join(links) + '<label><input type="checkbox" data-class="numbers-only"> only sentences whose numbers changed</label>'
-        '<label><input type="checkbox" data-class="hide-moved"> hide moved sentences</label><a href="#" id="open-all">unfold all</a></nav>'
+        '<label><input type="checkbox" data-class="hide-moved"> hide moved sentences</label><a href="#" id="open-all">fold or unfold all</a></nav>'
     )
     return (
         '<!doctype html>\n<html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
-        "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'\">"
+        f"<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; script-src '{SCRIPT_HASH}'\">"
         '<meta name="referrer" content="no-referrer">'
         f"<title>{_e(title)}</title><style>{CSS}</style></head><body><main>{nav}{''.join(parts)}"
         f"<footer>Made by arxiv-diff {__version__}. Left: the old version; right: the new one. "

@@ -55,4 +55,4 @@ def test_markdown_lists_table_changes_after_a_blank_line(tmp_path: Path) -> None
 
     d = compare(version(tmp_path, "v1"), version(tmp_path, "v2", BIG="28.9", ROWS=r"Transformer (base) & 27.3 & 38.1 \\"))
     md = markdown(d)
-    assert "| tab:main | Transformer (big) | EN-DE | 28.4 | 28.9 | +0.5 better |\n\n- table tab:main: 1 rows added" in md
+    assert "| tab:main | Transformer (big) | EN-DE | 28.4 | 28.9 | +0.5 better |\n\n- table tab:main: rows added: Transformer (base)" in md

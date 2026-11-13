@@ -100,7 +100,7 @@ def test_all_reports_the_steps_that_could_be_compared(tmp_path: Path, capsys: py
     fake.sources[3] = b"%PDF-1.5 ..."
     assert main(["2501.00001", "--all", "--format", "json"], client=fake.client()) == 2
     captured = capsys.readouterr()
-    report = json.loads(captured.out)
+    (report,) = json.loads(captured.out)  # --all: a list, of the steps that could be compared
     assert (report["old_version"], report["new_version"]) == (1, 2)
     assert "not compared: v2 → v3" in captured.err and "PDF only" in captured.err
 
@@ -109,10 +109,11 @@ def test_summary_lines_show_no_markdown_escapes(tmp_path: Path) -> None:
     """Inside <details>, GitHub does not read Markdown: "\\~1" would show with its backslash."""
     from helpers import version
 
-    md = markdown(compare(version(tmp_path, "v1"), version(tmp_path, "v2", METHOD="My_Model")))
+    md = markdown(compare(version(tmp_path, "v1"), version(tmp_path, "v2", METHOD="My_Model", BIG="28.9")))
     summaries = [line for line in md.splitlines() if line.startswith("<summary>")]
     assert summaries and all("\\" not in line for line in summaries)
-    assert "<summary>changed: 2 My_Model (was 2 Model) — +0 -0 ~0</summary>" in summaries
+    assert "<summary>changed: 3 Results — +0 -0 ~1</summary>" in summaries
+    assert "- changed: 2 My\\_Model (was 2 Model) — +0 -0 \\~0" in md  # renamed only: a line, nothing to fold
 
 
 def test_no_empty_sections_heading_and_no_missing_input_as_text(tmp_path: Path) -> None:

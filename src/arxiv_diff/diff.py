@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 
 from paper_proof.check import Reference
-from paper_proof.tables import Table, direction
+from paper_proof.tables import HIGHER, LOWER, Table, direction
 
 from .latex import Figure, Section, Sentence
 from .paper import Paper
@@ -125,9 +125,9 @@ def number_changes(a: str, b: str) -> list[NumberChange]:
             continue
         na = [(i1 + k, t) for k, t in enumerate(sa[i1:i2]) if NUMBER.fullmatch(t)]
         nb = [(j1 + k, t) for k, t in enumerate(sb[j1:j2]) if NUMBER.fullmatch(t)]
-        if not na or len(na) != len(nb):
+        if not na or not nb:
             continue
-        for (i, x), (j, y) in zip(na, nb, strict=True):
+        for (i, x), (j, y) in zip(na, nb, strict=False):  # in order; one added beside them is left out
             if x != y and _value(sa, i) != _value(sb, j):  # 12288 and 12,288 are the same number
                 before = "".join(tb[max(0, j - 4) : j]).strip()
                 after = "".join(tb[j + 1 : j + 5]).strip()
@@ -406,6 +406,15 @@ class CellChange:
             return None
         return round(self.new_value - self.old_value, 10)
 
+    @property
+    def result(self) -> bool:
+        """A changed result: a number that changed, or a result replaced by text or text by a result ("41.0" -> "--");
+        not a cell cleared or filled in, a spread, or the bold marking."""
+        if self.kind == "value":
+            return True
+        has_a, has_b = bool(cell_numbers(self.old)), bool(cell_numbers(self.new))
+        return self.kind == "text" and bool(self.old.strip() and self.new.strip()) and has_a != has_b
+
 
 @dataclass
 class TableDiff:
@@ -421,6 +430,9 @@ class TableDiff:
     columns_removed: list[str] = field(default_factory=list)
     rows_renamed: list[tuple[str, str]] = field(default_factory=list)  # (old, new): its name changed, its cells compared
     columns_renamed: list[tuple[str, str]] = field(default_factory=list)
+    # (old header, new header): the old column's numbers are now under another header (headers corrected or
+    # shifted), so changes reported under these headers may be relabelling, not new results
+    columns_moved: list[tuple[str, str]] = field(default_factory=list)
 
 
 def _norm(s: str) -> str:
@@ -528,6 +540,39 @@ def _same_shape(t: Table, u: Table) -> float:
     return 0.5 * len(ct & cu) / max(1, len(ct | cu))
 
 
+SPREAD = re.compile(r"(?:±|\\pm|\+/-|\bstd\b|\bsd\b|\bse\b)[\s_{}()$]*$", re.I)
+UNCLEAR = {"is", "em", "return", "success", "score", "rank", "time", "seconds", "second", "hours", "hour", "ms", "cost", "memory", "mem",
+           "distance", "params", "parameters", "flops", "macs", "error", "errors", "loss", "map", "ap", "reward", "recall", "precision"}  # fmt: skip
+
+
+def _is_spread(text: str, k: int) -> bool:
+    r"""Whether the k-th number of a cell is the spread of the one before it (± 0.2, \pm 0.2, (std 0.2)).
+
+    >>> _is_spread(r"4.1 $\pm$ 0.2", 1), _is_spread("89.3/82.1", 1), _is_spread("4.1 (std 0.3)", 1)
+    (True, False, True)
+    """
+    spans = list(CELL_NUMBER.finditer(text))
+    return 0 < k < len(spans) and bool(SPREAD.search(text[spans[k - 1].end() : spans[k].start()]))
+
+
+def caption_direction(caption: str) -> str:
+    """Which way is better, from a caption: an arrow or "higher/lower is better", or a metric named without doubt
+    (BLEU, accuracy, FID), never words that are also plain English ("is", "time", "score").
+
+    >>> caption_direction("BLEU scores on newstest2014."), caption_direction("Model sizes; the best is in bold.")
+    ('higher', '')
+    >>> caption_direction("Error (lower is better).")
+    'lower'
+    """
+    if re.search(r"\\uparrow|↑|higher is better", caption, re.I):
+        return "higher"
+    if re.search(r"\\downarrow|↓|lower is better", caption, re.I):
+        return "lower"
+    ways = {"higher" for m in HIGHER.finditer(caption) if m.group(0).lower() not in UNCLEAR}
+    ways |= {"lower" for m in LOWER.finditer(caption) if m.group(0).lower() not in UNCLEAR}
+    return ways.pop() if len(ways) == 1 else ""
+
+
 def _cell_text(t: Table, i: int, j: int) -> tuple[str, float | None, bool, int]:
     r = t.rows[i]
     if j >= len(r):
@@ -605,9 +650,9 @@ def diff_table(a: Table, b: Table) -> TableDiff:
                 na, nb = cell_numbers(t_a), cell_numbers(t_b)
                 if kind != "value" and na != nb:  # another number in the cell changed: "89.3/82.1" -> "89.3/82.3"
                     k = next((k for k, (x, y) in enumerate(zip(na, nb, strict=False)) if x != y), None)
-                    if k is not None:
+                    if k is not None and not (_is_spread(t_a, k) or _is_spread(t_b, k)):
                         kind, v_a, v_b = "value", na[k], nb[k]
-                    else:  # a number added or dropped beside the result: a spread, a delta
+                    else:  # a spread that changed ("4.1 ± 0.2" -> "4.1 ± 0.5"), or a number added or dropped beside it
                         kind = "text"
             else:
                 kind = "text" if _norm(t_a) != _norm(t_b) else ""
@@ -615,12 +660,40 @@ def diff_table(a: Table, b: Table) -> TableDiff:
                 continue
             better = None
             if kind == "value" and v_a is not None and v_b is not None:
-                way = direction(ckey) or direction(b.caption)  # "BLEU scores" over columns named EN-DE, EN-FR
+                way = direction(ckey) or caption_direction(b.caption)  # "BLEU scores" over columns named EN-DE, EN-FR
                 better = (v_b > v_a) == (way == "higher") if way else None
             d.cells.append(CellChange(rkey, ckey, t_a, t_b, v_a, v_b, kind, bold_a, bold_b, line, better))
+    d.columns_moved = _moved_columns(a, b, ca, cb, [(i_a, row_b[_norm(k)]) for i_a, k in ra if _norm(k) in row_b], d)
     if d.cells or d.caption or d.rows_added or d.rows_removed or d.columns_added or d.columns_removed or d.rows_renamed or d.columns_renamed:
         d.status = "changed"
     return d
+
+
+def _moved_columns(a: Table, b: Table, ca: list[str], cb: list[str], same_rows: list[tuple[int, int]], d: TableDiff) -> list[tuple[str, str]]:
+    """Old columns whose numbers now stand under another header: BLIP-2 v1 labelled its VQAv2 columns "val, test-dev"
+    and v3 "test-dev, test-std", with the same numbers. Each column whose values changed under its own header is
+    looked for among the new columns."""
+    changed_cols = {c.column for c in d.cells if c.kind == "value"}
+    out = []
+    for ja, key in enumerate(ca):
+        if key not in changed_cols and key in cb:
+            continue
+
+        def numbers(t: Table, j: int, side: int) -> list[float | None]:
+            return [t.rows[pair[side]][j].value if j < len(t.rows[pair[side]]) else None for pair in same_rows]
+
+        old = numbers(a, ja, 0)
+        if sum(v is not None for v in old) < 2:
+            continue
+        for jb, other in enumerate(cb):
+            if _norm(other) == _norm(key):
+                continue
+            new = numbers(b, jb, 1)
+            both = [(x, y) for x, y in zip(old, new, strict=True) if x is not None and y is not None]
+            if len(both) >= 2 and sum(x == y for x, y in both) >= 0.8 * len(both) >= 0.8 * sum(v is not None for v in old):
+                out.append((key, other))
+                break
+    return out
 
 
 def diff_tables(a: list[Table], b: list[Table]) -> list[TableDiff]:
@@ -803,7 +876,9 @@ class Summary:
     sections_added: int = 0
     sections_removed: int = 0
     sections_renamed: int = 0
-    table_values_changed: int = 0
+    table_values_changed: int = 0  # changed results: see CellChange.result
+    table_rows_added: int = 0
+    table_rows_removed: int = 0
     tables_added: int = 0
     tables_removed: int = 0
     figures_added: int = 0
@@ -833,7 +908,7 @@ class Diff:
     def changed(self) -> bool:
         s = self.summary
         return bool(
-            self.title or self.authors.changed or self.abstract or any(sd.status != "same" for sd in self.sections)
+            self.title or self.authors.changed or self.abstract or any(sd.status != "same" or sd.moved for sd in self.sections)
             or any(t.status != "same" for t in self.tables) or any(f.status != "same" for f in self.figures)
             or s.references_added or s.references_removed or s.references_updated
         )  # fmt: skip
@@ -873,7 +948,9 @@ def compare(a: Paper, b: Paper) -> Diff:
     s.sections_added = sum(sd.status == "added" for sd in sections)
     s.sections_removed = sum(sd.status == "removed" for sd in sections)
     s.sections_renamed = sum(sd.renamed for sd in sections)
-    s.table_values_changed = sum(c.kind == "value" for t in tables for c in t.cells)
+    s.table_values_changed = sum(c.result for t in tables for c in t.cells)
+    s.table_rows_added = sum(len(t.rows_added) for t in tables if t.status == "changed")
+    s.table_rows_removed = sum(len(t.rows_removed) for t in tables if t.status == "changed")
     s.tables_added = sum(t.status == "added" for t in tables)
     s.tables_removed = sum(t.status == "removed" for t in tables)
     s.figures_added = sum(f.status == "added" for f in d.figures)
