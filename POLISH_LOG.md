@@ -108,3 +108,44 @@ Tests: 44, Python 3.10 and 3.14; ruff, mypy clean.
   on the example's two versions found `TinyFormer · EN-XX: 31.2 → 30.8` as the check expects.
 
 Next: five polishing rounds, then v0.1.0.
+
+## Polishing round 1 (2026-11-13)
+
+1. **Function**: every README command run as a user would (two folders, two `.tex` files, the same folder twice, one
+   folder, three sources, a missing path, `--all` with folders, `--fail-on`, the four formats, `-o` into a new
+   folder, `v0`). Found: `-o` into a folder that does not exist crashed with a traceback; usage errors exited 1 (the
+   code `--fail-on` uses) in some places and 2 in others; `--all` with two folders was silently ignored; a version
+   arXiv does not have was only found out by downloading. All fixed: usage errors exit 2 with argparse's message,
+   `--all` is for one arXiv id, the versions are checked against arXiv's record before anything is downloaded,
+   `-o` creates its folder; the exit codes are in both READMEs.
+2. **Code**: an independent review (an agent reading the code without my notes) found nine bugs, eight reproduced;
+   each is now a test in `tests/test_review.py`:
+   - **renamed-column pairing joined different columns** (EN-DE and EN-RO share a word, so the EN-DE results were
+     reported as changed EN-RO results; same for Acc@1 → Acc@5): a column now counts as renamed only if most of its
+     numbers stayed, or, with no numbers to go by, its header is nearly the same;
+   - **ties went to the last** table, figure and section (an unchanged table was reported added when a second table
+     with its caption followed it): ties now go to the first;
+   - **author changes were invisible for non-Latin names** (Cyrillic, Greek, CJK compared as empty strings);
+   - **the Action built the old version wrongly**: with `path` naming the main `.tex` only that file was archived
+     (no `\input` files, no `.bib`); `base: main` was fetched but not usable by name; with no base in a shallow clone
+     `HEAD~1` did not exist. Now: the main file's whole folder, the fetched commit itself, a deepened clone for the
+     commit before; a base starting with `-` is refused. CI runs the Action with a `.tex` path;
+   - **hostile sources could make it hang**: `\input` fanning out (4^12 copies), a command expanding into itself,
+     a 1.5 MB paragraph (quadratic sentence splitting: 23 s), thousands of unclosed `\(` or environments. While
+     testing the fixes two more quadratic spots showed: finding a sentence's line counted newlines from the top of
+     the file each time (25 s for 90,000 sentences), and matching long runs of identical sentences. Now: each file
+     `\input` at most 8 times within a 50 MB budget, self-referencing commands left alone and expansion capped,
+     environments found with one search each, sentence splitting in one pass, a line index per file, matching with
+     the same beginning and end set aside. Every hostile case now takes about a second;
+   - the JSON report lost the arXiv title (the diff's own `title` overwrote it): now `arxiv_title`;
+   - `--all` threw every step away when one version was PDF-only: the others are reported, the failed step named;
+   - `<summary>` lines in the Markdown report would show `\~1`, `\_` on GitHub (Markdown is not read inside HTML);
+   - an empty "Sections" heading when only tables changed; a missing `\input` file's name read as a sentence.
+3. **Tests**: 47 → 63; Python 3.10 and 3.14 locally, Ubuntu/Windows/macOS with 3.10 and 3.13 in CI.
+4. **Experience**: an 81,600-word paper compares in 2.8 s; error messages say what to do.
+5. **Docs**: exit codes in both READMEs; CONTRIBUTING describes the GitHub render check.
+6. **Engineering**: one dependency (paper-proof, which brings pypdf); CI green with the Action's new check.
+7. **Security and privacy**: the Markdown report checked as GitHub renders it (`scripts/check_github_render.py`):
+   hostile text in a synthetic paper's title, abstract, a sentence, a caption and a table row renders as text only.
+   That check found a list placed right under the table being read as more table rows, and caption changes and
+   renamed rows and columns missing from the Markdown report; both fixed.
