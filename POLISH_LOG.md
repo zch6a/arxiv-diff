@@ -193,3 +193,32 @@ Next: five polishing rounds, then v0.1.0.
 5. **Docs**: as above; both READMEs say the same.
 6. **Engineering**: CI green; the one dependency pinned by commit.
 7. **Security and privacy**: the CSP by hash; control characters in every name the paper controls.
+
+## Polishing round 3 (2026-11-13)
+
+1. **Function: 20 papers outside machine learning**, picked from arXiv's API (the newest-updated papers with a v2
+   or later in hep-th, math.AP, cond-mat.str-el, astro-ph.GA, q-bio.NC, quant-ph, math.CO, econ.EM,
+   physics.flu-dyn, stat.ME; one is PDF-only). Tables: 0 unexplained numbers in 69 audited pairs. But "numbers in
+   the text" were mostly formulas: 47 reported, about a dozen real. Fixed, each a test in `tests/test_fields.py`:
+   - numbers inside inline math and displayed equations (`\frac12` → `\frac{1}{2}`, exponents, coefficients) are
+     not numbers in the text; a number written in math mode (`$28.4$ BLEU`) still is; the formula's change still
+     shows in the sentence's word diff;
+   - references are one token, written `‹label›` (`\eqref{G8}` → `\eqref{G12}` is not a changed number); DOIs are
+     one token (a Zenodo record);
+   - Elsevier's marks after a name (`\corref{cor1}` made "Piyush Akimitsucor"); names compared by first initial and
+     surname ("E. Elmakies" in v1 is "Elad Elmakies" in v6);
+   - a version whose authors are typed into the page without `\author` (econ.EM v2): the authors are said to be
+     unread there, not removed; its `\iflatexml` branch (the text arXiv's HTML version gets) is no longer read
+     beside the PDF's, which had doubled its title block.
+   After the fixes: 16 numbers in the text, all real prose edits (84 → 85 percent, 1.68 → 1.66, a confidence bound
+   0.33 → 0.32, an insert renamed S2 → S2.5, a range 880 → 1300). The sources are deleted.
+2. **Code**: the changes above are small and local; no dead code left (an unused variable caught in review).
+3. **Tests**: 78 → 88; Python 3.10 and 3.14 locally, three systems in CI.
+4. **Experience**: installed from GitHub as the README says (`uvx --from git+https://github.com/zch6a/arxiv-diff`):
+   15 s the first time, three packages, the right report.
+5. **Docs**: the README's sample of *Attention Is All You Need* no longer matched the tool's summary line (table
+   rows added are now counted): re-fetched, the sample and the demo image regenerated; `‹labels›` in the READMEs,
+   the Skill and the HTML page's footer.
+6. **Engineering**: CI green.
+7. **Security and privacy**: the arXiv queries carry a generic User-Agent; the sources were kept in the scratchpad
+   only while measuring.
