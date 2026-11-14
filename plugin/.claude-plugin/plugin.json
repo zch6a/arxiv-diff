@@ -1,7 +1,7 @@
 {
   "name": "arxiv-diff",
   "description": "What changed between two versions of a paper: the result numbers in its tables and text, sentences, abstract, authors, figures and references. Any two arXiv versions, or two LaTeX folders or git commits.",
-  "version": "0.1.0",
+  "version": "0.2.2",
   "author": { "name": "zch6a" },
   "homepage": "https://github.com/zch6a/arxiv-diff",
   "repository": "https://github.com/zch6a/arxiv-diff",

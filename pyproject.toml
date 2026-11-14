@@ -1,6 +1,6 @@
 [project]
 name = "arxiv-diff"
-version = "0.2.1"
+version = "0.2.2"
 description = "What changed between two versions of a paper: the result numbers in its tables, sections and sentences, the abstract, authors, references and figures. Any two arXiv versions, or two LaTeX folders."
 readme = "README.md"
 license = "MIT"

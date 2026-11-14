@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use arxiv-diff in your research, please cite it as below."
+title: "arxiv-diff: what changed between two versions of a paper"
+type: software
+authors:
+  - alias: zch6a
+repository-code: "https://github.com/zch6a/arxiv-diff"
+license: MIT
+version: "0.2.2"
+date-released: "2026-11-14"

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.2 — 2026-11-14
+
+- The Claude Code plugin's manifest (`plugin/.claude-plugin/plugin.json`) says 0.2.2: it had stayed at an older
+  version through the last release, so the marketplace showed the old one (found by `repro-score release`).
+- A `CITATION.cff`, for GitHub's "Cite this repository".
+
 ## 0.2.1 — 2026-11-14
 
 - The agent skill's frontmatter is valid YAML again: the new sentence about `arxiv-watch` held a `: `; the values
