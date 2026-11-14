@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1 — 2026-11-14
+
+- The agent skill's frontmatter is valid YAML again: the new sentence about `arxiv-watch` held a `: `; the values
+  are quoted now.
+
 ## 0.2.0 — 2026-11-14
 
 **`arxiv-diff watch`**: which of the arXiv papers you cite posted a new version, and what changed in it.
