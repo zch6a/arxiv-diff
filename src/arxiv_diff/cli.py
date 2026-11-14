@@ -5,6 +5,7 @@ arxiv-diff 1706.03762v3               v2 → v3
 arxiv-diff 1706.03762v1 1706.03762v5  any two versions
 arxiv-diff 1706.03762 --all           every step, v1 → v2 → ... → latest
 arxiv-diff old/ new/                  two LaTeX folders (or .tex files)
+arxiv-diff watch refs.bib             new versions of the arXiv papers you cite (see arxiv-diff watch --help)
 """
 
 from __future__ import annotations
@@ -163,6 +164,17 @@ def _write(output: Path | None, text: str) -> None:
 def main(argv: list[str] | None = None, client: Client | None = None) -> int:
     """The command line. Exit status: 0 compared, 1 when --fail-on says so, 2 when it could not compare (and on any
     unexpected error, which must not read as "results changed")."""
+    args = sys.argv[1:] if argv is None else argv
+    if args[:1] == ["watch"] and not Path("watch").exists():
+        from . import watch
+
+        try:
+            return watch.main(args[1:], client)
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except Exception as e:  # noqa: BLE001
+            print(f"arxiv-diff watch: {e.__class__.__name__}: {e}", file=sys.stderr)
+            return 2
     try:
         return _main(argv, client)
     except (KeyboardInterrupt, SystemExit):

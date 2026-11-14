@@ -75,6 +75,7 @@ arxiv-diff 2106.09685v2                   # v1 against v2
 arxiv-diff 1706.03762v3 1706.03762v7      # any two versions
 arxiv-diff 1706.03762 --all               # every version against the next
 arxiv-diff paper-v1/ paper-v2/            # two LaTeX folders (or two main .tex files)
+arxiv-diff watch refs.bib                 # which of the arXiv papers you cite posted a new version (below)
 ```
 
 | option | |
@@ -89,6 +90,75 @@ arxiv-diff paper-v1/ paper-v2/            # two LaTeX folders (or two main .tex 
 It exits with 0 when the comparison is done, 1 when `--fail-on` says so, and 2 when it could not compare (a version
 arXiv does not have, a PDF-only version, a folder without a LaTeX document). With `--all`, the steps that can be
 compared are reported and the others named; the exit is then 2 (or 1, when `--fail-on` says so).
+
+## Watch the papers you cite
+
+A paper you cite posts v3 with a corrected table, or gets accepted and changes its title; the preprint you build on
+changes its results. `arxiv-diff watch` reads your `.bib` (or a LaTeX folder, a text file of ids, or ids), finds the
+arXiv papers in it (`eprint` fields, arxiv.org links, `arXiv:` notes, arXiv DOIs), and tells you which posted a new
+version since you last looked, and which now have a journal reference. With `--diff`, each new version is compared with
+the one you saw, results first. Its real output on LoRA's bibliography:
+
+```text
+$ arxiv-diff watch lora-paper/ --since 2023-01-01 --diff
+2 new version(s) among 44 arXiv papers:
+
+2103.10385  v1 → v2  (2023-10-25)  GPT Understands, Too
+    cited as: liu_gpt_2021
+    prose 4,300 → 3,801 words, 89% of the old text rewritten or removed
+    sentences +165 -194 ~13 changed 3 moved
+    12 sections added, 10 sections removed, 2 sections renamed, 11 tables added, 4 tables removed, 2 figures changed, ...
+    https://arxiv.org/abs/2103.10385v2
+
+2001.04413  v5 → v6  (2023-07-07)  Backward Feature Correction: How Deep Learning Performs Deep (Hierarchical) Learning
+    cited as: allen2020backward
+    comments: V2 adds more experiments, V3 polishes writing and improves experiments, V4 makes minor fixes to the figures, V5/V6 polish writing
+    prose 32,941 → 33,563 words, 10% of the old text rewritten or removed
+    2 numbers changed in the text, 1 section added, 2 sections removed, 5 sections renamed, 1 figure added, ...
+    https://arxiv.org/abs/2001.04413v6
+```
+
+The first run remembers the versions it saw in `refs.arxiv-watch.json`, next to the input (`--state` for another
+place); a `.bib` entry that names a version (`2106.09685v2`) is compared with that version from the start. Only the
+ids are sent, to arXiv's API, in batches of 100, one request every three seconds (when arXiv answers that it is busy,
+it waits and asks again).
+
+| option | |
+|---|---|
+| `--since 2025-06-01` | also report papers whose latest version came after this date, compared with the version that was current then |
+| `--diff` | what changed in each new version (fetches the two sources) |
+| `--format markdown` / `json` | an issue or a comment / everything |
+| `--dry-run` | do not update the state file |
+| `--fail-on-new` | exit with 1 when there is a new version |
+
+Once a week, as an issue in the paper's repository (stateless: `--since` a week ago):
+
+```yaml
+# .github/workflows/arxiv-watch.yml: every Monday, an issue listing last week's new versions of the papers you cite
+on:
+  schedule: [{cron: "0 6 * * 1"}]
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - name: New versions since last week
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          since=$(date -d '7 days ago' +%F)
+          if ! uvx --from git+https://github.com/zch6a/arxiv-diff@v0 arxiv-diff watch paper/refs.bib \
+               --since "$since" --dry-run --diff --format markdown --fail-on-new > news.md; then
+            gh issue create --title "New versions of cited papers since $since" --body-file news.md
+          fi
+```
 
 ## What it compares
 
@@ -151,6 +221,11 @@ neuroscience, quantum physics, combinatorics, econometrics, fluid dynamics, stat
 unexplained). Outside machine learning most numbers that change are in formulas: those are shown in the sentences'
 word diffs but not listed as changed numbers, which brought the list from 47 to 16 entries, all real edits.
 
+**Watching**: on the bibliographies of Mamba (75 arXiv papers) and LoRA (44), `watch --since` found 1 and 2 new
+versions, each checked against arXiv's version list; for LoRA's two, `--diff` reports an 89% rewrite of "GPT
+Understands, Too" (v1 → v2) and two changed numbers in "Backward Feature Correction" (v5 → v6). The first run on
+Mamba's 75 met arXiv's rate limit (HTTP 429), which is why it now waits and asks again.
+
 Measuring found what tests had not, and each case is now a test: a row and its starred twin read as one row
 (Swin), a change in the second number of a cell like `89.3/82.1` missed (ALBERT), rows and columns whose names
 changed a little left unpaired (ALBERT's `59M` → `60M`, LoRA's `Accuracy` → `Acc.`), and, between two rows named
@@ -159,6 +234,9 @@ the paper's own command (`\cell{6.5}{0.4}`), years inside citation keys taken fo
 wrapped over two lines.
 
 ## Limits
+
+- `watch` finds the arXiv papers a `.bib` names by id or link. An entry that cites a preprint by title and authors
+  only is not seen (paper-proof's reference check finds published versions of those).
 
 - It compares the LaTeX. A number that changed only inside a figure's image, or a version submitted as a PDF only,
   is not seen. The paper's own commands are expanded, except those with an optional argument and `\def` with parameters,

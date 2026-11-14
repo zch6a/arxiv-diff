@@ -292,3 +292,19 @@ paper-proof, is a git reference).
 
 Both READMEs now end (before the licence) with a short section pointing to research-kit, the toolkit's front door: all
 thirteen tools in the order of the work, and one Claude Code plugin marketplace for their skills. Documentation only.
+
+### 2026-11-14 — 0.2.0: arxiv-diff watch
+
+Chosen from research-kit's list of needs nothing covers: "hear when a paper you follow or cite posts a new version,
+and what changed in it" (arxiv-sanity-lite and zotero-arxiv-daily track new submissions only).
+
+`watch.py`: arXiv ids from a `.bib` (eprint fields, links, `arXiv:` notes, `10.48550/arXiv.` DOIs; the version an
+entry names, the keys citing it), the latest versions from arXiv's API (Atom; error entries skipped), a JSON state
+file, `--since` refined with the OAI version list, `--diff` through the existing compare and headline. 9 tests with a
+fake arXiv (API, OAI and sources): every input kind, first run, a new version with its diff, newly published, dry run,
+`--since` picking v2 of four, a 429 answered on the second try, broken state file.
+
+Measured on the bibliographies of two of the 50 papers (fetched to a temporary folder, deleted after): Mamba's 75
+arXiv references, 1 new version since 2025-06-01; LoRA's 44, 2 since 2023-01-01, and their diffs ("GPT Understands,
+Too" rewritten, 89%; two numbers changed in "Backward Feature Correction"). The first try was refused with HTTP 429
+(arXiv had been asked for 50 sources minutes before): retrying after a wait was added.

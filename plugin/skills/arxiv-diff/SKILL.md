@@ -1,6 +1,6 @@
 ---
 name: arxiv-diff
-description: Compare two versions of a paper with arxiv-diff. Reports which result numbers changed in its tables (by row and column) and in its text, the sentences added, removed and rewritten, and changes to the abstract, conclusion, authors, figures and cited references. Works on any two arXiv versions (fetched from arXiv) or two LaTeX folders. Use when the user asks what changed between versions of a paper (v1 vs v2, preprint vs camera-ready), whether a paper's results changed after review, or to review the changes to a LaTeX paper in a branch or pull request.
+description: Compare two versions of a paper with arxiv-diff. Reports which result numbers changed in its tables (by row and column) and in its text, the sentences added, removed and rewritten, and changes to the abstract, conclusion, authors, figures and cited references. Works on any two arXiv versions (fetched from arXiv) or two LaTeX folders. Use when the user asks what changed between versions of a paper (v1 vs v2, preprint vs camera-ready), whether a paper's results changed after review, or to review the changes to a LaTeX paper in a branch or pull request. Also watches the arXiv papers in a .bib for new versions (arxiv-diff watch refs.bib): use when the user asks whether papers they cite were updated.
 license: MIT
 compatibility: Needs Python 3.10+ and uv. Runs arxiv-diff with uvx from GitHub (git+https://github.com/zch6a/arxiv-diff) unless an arxiv-diff command is installed. For arXiv ids it fetches the sources from arxiv.org (one request every 3 seconds, into a temporary folder that is deleted); for folders it reads them offline.
 metadata:
@@ -21,6 +21,12 @@ Use `arxiv-diff` instead of the `uvx ...` prefix if it is installed. Useful opti
 - `--format html -o diff.html`: one self-contained page with the two versions side by side; tell the user where it
   is. `--format json` for everything, with file and line; `--format markdown` for a comment.
 - `--full`: every changed sentence (the terminal report shows a few per section otherwise).
+
+**Papers the user cites**: `arxiv-diff watch refs.bib` (or a LaTeX folder) lists the arXiv papers in it that posted a
+new version since the last run (the versions seen are kept in `refs.arxiv-watch.json`; tell the user it was created).
+`--since YYYY-MM-DD` for versions after a date, `--diff` for what changed in each (results first), `--dry-run` to
+leave the state file alone. Only the arXiv ids are sent. A new version that changed results matters most to a paper
+that quotes those results: say so, with the entry's key.
 
 For a paper in a git repository, put the old version in a folder first (`git worktree add /tmp/old <ref>`, or
 `git archive <ref> -- paper | tar -x -C /tmp/old`) and compare the two folders.

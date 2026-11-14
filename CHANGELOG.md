@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.0 — 2026-11-14
+
+**`arxiv-diff watch`**: which of the arXiv papers you cite posted a new version, and what changed in it.
+
+- Reads a `.bib`, a LaTeX folder (its `.bib` files), a text file of ids, or ids; finds arXiv papers by `eprint`,
+  arxiv.org links, `arXiv:` in any field and arXiv DOIs, with the entries that cite each.
+- Remembers the versions seen in a JSON file next to the input (`--state`); a `.bib` entry that names a version is
+  compared with it from the first run. Reports new versions and papers that now have a journal reference.
+- `--since DATE` (compared with the version current on that date, from arXiv's version list), `--diff` (arxiv-diff's
+  headline for each new version), `--format text|markdown|json`, `--dry-run`, `--fail-on-new`.
+- arXiv's API in batches of 100 ids, paced; a 429 or 503 answer is retried after 15, 60 and 180 seconds.
+- The README has a weekly GitHub workflow that opens an issue.
+
 ## 0.1.0
 
 The first release: what changed between two versions of a paper, results first.
